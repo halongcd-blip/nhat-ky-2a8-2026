@@ -1090,14 +1090,12 @@ renderPetWaste: (hygiene) => {
                 const setup = document.getElementById('pet-select-screen');
                 const main = document.getElementById('pet-main-screen');
                 
-                // 1. Nếu chưa có pet thì hiện màn hình chọn
                 if(!p) { 
                     setup.classList.remove('hidden'); 
                     main.classList.add('hidden'); 
                     return; 
                 }
                 
-                // 2. Nếu có pet thì hiện màn hình nuôi
                 setup.classList.add('hidden'); 
                 main.classList.remove('hidden');
 
@@ -1106,21 +1104,28 @@ renderPetWaste: (hygiene) => {
                     dog: 'https://i.pinimg.com/originals/1a/ad/ea/1aadea234ad1b805c2d39cd892abdfad.gif', 
                     bunny: 'https://i.pinimg.com/originals/3a/0e/11/3a0e1105df06e7a3a24d0229920fb1d3.gif' 
                 };
-                const bgs = { 
-                    cat: 'url("https://png.pngtree.com/thumb_back/fh260/background/20211114/pngtree-bright-orange-living-room-illustration-image_916011.png")', 
-                    dog: 'url("https://img.freepik.com/vector-cao-cap/minh-hoa-vector-ve-noi-that-phong-khach-tuyet-dep-canh-hoat-hinh-ve-phong-khach-voi-cua-so-ghe-sofa-goi-tua-hinh-anh-ban-tron-binh-hoa-va-cau-thang-len-tang-hai_812561-961.jpg")', 
-                    bunny: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtree-cartoon-forest-environment-illstration-image_1401354.jpg")' 
-                };
                 
                 const bg = document.getElementById('pet-stage-bg');
-                bg.style.backgroundImage = bgs[p.type];
-                
-                const petEl = document.getElementById('pet-display');
-                if(petEl.style.backgroundImage !== `url("${images[p.type]}")`) {
-                    petEl.style.backgroundImage = `url('${images[p.type]}')`;
+                // Sửa lỗi nếu p.type không hợp lệ
+                if (p.type && images[p.type]) {
+                    const bgs = { 
+                        cat: 'url("https://png.pngtree.com/thumb_back/fh260/background/20211114/pngtree-bright-orange-living-room-illustration-image_916011.png")', 
+                        dog: 'url("https://img.freepik.com/vector-cao-cap/minh-hoa-vector-ve-noi-that-phong-khach-tuyet-dep-canh-hoat-hinh-ve-phong-khach-voi-cua-so-ghe-sofa-goi-tua-hinh-anh-ban-tron-binh-hoa-va-cau-thang-len-tang-hai_812561-961.jpg")', 
+                        bunny: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtree-cartoon-forest-environment-illstration-image_1401354.jpg")' 
+                    };
+                    bg.style.backgroundImage = bgs[p.type];
+                    
+                    const petEl = document.getElementById('pet-display');
+                    // Chỉ cập nhật ảnh nếu khác để tránh nháy
+                    const currentUrl = petEl.style.backgroundImage;
+                    const newUrl = `url("${images[p.type]}")`;
+                    if(currentUrl !== newUrl && currentUrl !== newUrl.replace(/"/g, "'")) {
+                         petEl.style.backgroundImage = newUrl;
+                    }
                 }
                 
-                // Xử lý khi thú chết
+                // Xử lý thú chết/sống
+                const petEl = document.getElementById('pet-display');
                 if(p.isDead) { 
                     document.getElementById('pet-dead-overlay').classList.remove('hidden'); 
                     petEl.classList.add('pet-dead'); 
@@ -1131,25 +1136,28 @@ renderPetWaste: (hygiene) => {
                     window.app.startWander(); 
                 }
 
-                // Cập nhật thông tin text
                 document.getElementById('pet-name-display').textContent = p.name;
                 document.getElementById('pet-level').textContent = p.level || 1;
                 document.getElementById('pet-exp').textContent = `${Math.floor(p.exp||0)}/100`;
                 
-                // Cập nhật thanh chỉ số
                 const setBar = (id, v) => { 
-                    document.getElementById('bar-'+id).style.width = `${v}%`; 
-                    document.getElementById('val-'+id).textContent = `${Math.floor(v)}%`; 
+                    const val = Math.max(0, Math.min(100, v || 0)); // Đảm bảo số hợp lệ 0-100
+                    document.getElementById('bar-'+id).style.width = `${val}%`; 
+                    document.getElementById('val-'+id).textContent = `${Math.floor(val)}%`; 
                 };
                 setBar('hunger', p.hunger); 
                 setBar('fun', p.fun); 
                 setBar('hygiene', p.hygiene);
                 
-                // === [QUAN TRỌNG] VẼ PHÂN (NẰM TRONG HÀM) ===
-                console.log("Đang vẽ phân cho chỉ số:", p.hygiene);
+                // === [CODE KIỂM TRA LỖI] ===
+                // In ra console để bạn xem logic có chạy không
+                console.log("=== ĐANG VẼ GAME NUÔI THÚ ===");
+                console.log("Độ sạch sẽ hiện tại:", p.hygiene);
+                
+                // GỌI HÀM VẼ PHÂN (Chắc chắn nằm trong hàm)
                 window.app.renderPetWaste(p.hygiene || 0);
 
-            }, // <--- Dấu phẩy kết thúc hàm renderPetGame, ĐỪNG XÓA
+            }, // <--- Dấu phẩy kết thúc hàm, KHÔNG ĐƯỢC XÓA
             
             // --- HÀM DI CHUYỂN NGẪU NHIÊN 3D ---
             startPetWandering: () => {
@@ -1940,5 +1948,6 @@ buyPetItem: async (price, type, val) => {
     </div>
 </div>
 </body>
+
 
 </html>
