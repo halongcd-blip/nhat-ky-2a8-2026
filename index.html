@@ -975,28 +975,28 @@ renderPetWaste: (hygiene) => {
                 
                 container.innerHTML = ''; 
                 
-                // Ép kiểu số để tránh lỗi dữ liệu từ Firebase là chuỗi
                 const h = Number(hygiene) || 0;
                 const wasteCount = Math.floor((100 - h) / 10);
-
-                console.log("Số đống phân cần vẽ:", wasteCount); // Dòng này để bạn kiểm tra ở F12
 
                 for (let i = 0; i < wasteCount; i++) {
                     const poop = document.createElement('span');
                     poop.innerHTML = '💩';
-                    // Thêm class để phân nằm cố định trên mặt đất
+                    // animate-bounce: Giúp phân nhảy lên xuống tại chỗ
                     poop.className = 'absolute text-3xl drop-shadow-md animate-bounce';
                     
-                    // Tính toán tọa độ chuẩn để phân nằm trên mặt sàn (phía dưới thú cưng)
-                    // X từ 15% đến 85% chiều ngang
-                    // Y từ 70% đến 85% chiều dọc (khu vực sàn)
-                    const randomX = 15 + (Math.random() * 70);
-                    const randomY = 70 + (Math.random() * 15);
-
-                    poop.style.left = randomX + '%';
-                    poop.style.top = randomY + '%';
+                    // --- SỬA ĐOẠN NÀY: TÍNH VỊ TRÍ CỐ ĐỊNH ---
+                    // Dùng biến 'i' để tính, đảm bảo vị trí không thay đổi khi reload
+                    // Công thức: Bắt đầu từ 15%, mỗi cục cách nhau 15% chiều ngang
+                    // % 70: Để nếu nhiều quá thì nó quay vòng lại, không bị tràn ra ngoài màn hình
+                    const fixedX = 15 + ((i * 15) % 70); 
                     
-                    // Quan trọng: Đảm bảo không bị che
+                    // Xếp so le độ cao một chút cho tự nhiên (cục cao cục thấp)
+                    const fixedY = 75 + ((i % 2) * 5); 
+
+                    poop.style.left = fixedX + '%';
+                    poop.style.top = fixedY + '%';
+                    // ------------------------------------------
+                    
                     poop.style.zIndex = "30";
                     poop.style.position = "absolute";
 
