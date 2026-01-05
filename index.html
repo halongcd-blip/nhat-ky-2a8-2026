@@ -1792,7 +1792,11 @@ buyPetItem: async (price, type, val) => {
                 
                 const setBar = (id, v) => { document.getElementById('bar-'+id).style.width = `${v}%`; document.getElementById('val-'+id).textContent = `${Math.floor(v)}%`; };
                 setBar('hunger', p.hunger); setBar('fun', p.fun); setBar('hygiene', p.hygiene);
-            },
+    
+    // === THÊM DÒNG NÀY VÀO ===
+    window.app.renderPetWaste(p.hygiene || 0); 
+},
+            
             startWander: () => {
                 if(petWanderInterval) return;
                 const el = document.getElementById('pet-display');
@@ -1948,6 +1952,5 @@ buyPetItem: async (price, type, val) => {
     </div>
 </div>
 </body>
-
 
 </html>
