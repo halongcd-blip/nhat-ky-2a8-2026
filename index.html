@@ -302,6 +302,43 @@
     transition: all 0.3s ease-in-out; 
     cursor: default; /* Không cho click trong khi đang animation */
 }
+/* === THÊM CSS CHO NHẬT KÝ CÁ NHÂN === */
+.bg-private { background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%); } /* Màu tím mộng mơ */
+
+/* Giao diện tờ giấy nhật ký */
+.private-note {
+    background-color: #fffbeb; /* Màu giấy vàng nhạt */
+    background-image: linear-gradient(#e5e7eb 1px, transparent 1px);
+    background-size: 100% 1.5rem; /* Dòng kẻ */
+    border-left: 6px solid #f59e0b; /* Lề trái màu cam */
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 2px 4px 6px rgba(0,0,0,0.1);
+    position: relative;
+    font-family: 'Courier New', Courier, monospace; /* Phông chữ kiểu máy đánh chữ cho hoài niệm */
+    line-height: 1.5rem;
+}
+
+.private-note::before {
+    content: "📌";
+    position: absolute;
+    top: -10px;
+    right: 10px;
+    font-size: 1.5rem;
+    transform: rotate(15deg);
+}
+
+.private-date {
+    display: inline-block;
+    background: #f59e0b;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    font-family: 'Segoe UI', sans-serif; /* Quay về phông thường cho ngày tháng dễ đọc */
+}
     </style>
 </head>
 <body class="text-slate-800">
@@ -379,6 +416,13 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div onclick="app.nav('diary')" class="color-card bg-diary"><div class="icon-box"><i data-lucide="book-open"></i></div><h3 class="text-lg font-bold">Nhật Ký Hàng Ngày</h3><p class="text-xs opacity-90">Những việc tốt và niềm vui.</p></div>
+
+
+<div onclick="app.nav('private')" class="color-card bg-private">
+    <div class="icon-box"><i data-lucide="lock"></i></div>
+    <h3 class="text-lg font-bold">Nhật Ký Cá Nhân</h3>
+    <p class="text-xs opacity-90">Góc riêng tư của con.</p>
+</div>
                 <div onclick="app.nav('pets')" class="color-card bg-pets"><div class="icon-box"><i data-lucide="cat"></i></div><h3 class="text-lg font-bold">Góc Thú Cưng</h3><p class="text-xs opacity-90">Khoe những con vật nuôi của bạn.</p></div>
                 <div onclick="app.nav('chat')" class="color-card bg-chat"><div class="icon-box"><i data-lucide="message-circle"></i></div><h3 class="text-lg font-bold">Hỏi Đáp Bài Tập</h3><p class="text-xs opacity-90">Trao đổi bài tập cùng cô và bạn.</p></div>
                 <div onclick="app.nav('notif')" class="color-card bg-notif"><div class="icon-box"><i data-lucide="bell"></i></div><h3 class="text-lg font-bold">Thông Báo</h3><p class="text-xs opacity-90">Tin tức từ cô giáo.</p></div>
@@ -1766,7 +1810,19 @@ buyPetItem: async (price, type, val) => {
                 } 
             },
             clearChat: async () => { if(confirm("Xóa toàn bộ lịch sử chat?")) { const q = query(collection(db, `artifacts/${appId}/chat`)); const snap = await getDocs(q); snap.forEach(async (d) => await deleteDoc(d.ref)); } },
-            nav: (tab) => { currentTab = tab; lastVisibleDoc = null; document.getElementById('post-content').value = ''; window.app.clearImg(); if (unsubscribeFeed) { unsubscribeFeed(); unsubscribeFeed = null; } document.getElementById('dashboard-view').classList.remove('active-block'); document.getElementById('detail-view').classList.add('active-block'); window.scrollTo(0, 0); const titles = { diary: 'Nhật Ký', pets: 'Thú Cưng', chat: 'Hỏi Đáp', notif: 'Thông Báo', stars: 'Học Sinh Ngoan', bday: 'Sinh Nhật', quiz: 'Thi Trắc Nghiệm', gift: 'Góc Đổi Quà', admin: 'Quản Lý', settings: 'Cài Đặt', shop: 'Góc Đổi Quà', petgame: 'Nuôi Thú Ảo' }; document.getElementById('page-title').textContent = titles[tab] || 'Chi Tiết'; document.getElementById('post-form').classList.add('hidden'); document.getElementById('star-admin-form').classList.add('hidden'); document.getElementById('admin-panel').classList.add('hidden'); document.getElementById('settings-panel').classList.add('hidden'); document.getElementById('shop-container').classList.add('hidden'); document.getElementById('petgame-container').classList.add('hidden'); document.getElementById('feed').classList.add('hidden'); document.getElementById('load-more-container').classList.add('hidden'); document.getElementById('quiz-container').classList.add('hidden'); const feedEl = document.getElementById('feed'); if(tab === 'quiz') { document.getElementById('quiz-container').classList.remove('hidden'); window.app.initQuiz(); } else if(tab === 'shop') { document.getElementById('shop-container').classList.remove('hidden'); window.app.renderInventory(); } else if(tab === 'petgame') { document.getElementById('petgame-container').classList.remove('hidden'); window.app.renderPetGame(); } else if(tab === 'admin') { if(currentUser.role !== 'admin') { window.app.goHome(); return; } document.getElementById('admin-panel').classList.remove('hidden'); window.app.loadUsers(); window.app.loadStudentsForReward(); } else if (tab === 'settings') { document.getElementById('settings-panel').classList.remove('hidden'); document.getElementById('settings-user-name').textContent = currentUser.name; document.getElementById('avatar-preview').src = currentUser.avatarUrl || 'https://via.placeholder.com/96x96?text=Avt'; } else { feedEl.innerHTML = '<div class="text-center mt-4 text-gray-500">Đang tải dữ liệu...</div>'; feedEl.classList.remove('hidden'); if(currentUser.role === 'admin' || !['notif', 'stars', 'bday'].includes(tab)) { if (tab === 'stars' && currentUser.role === 'admin') { document.getElementById('star-admin-form').classList.remove('hidden'); window.app.loadStudentsForSelection(); } else { document.getElementById('post-form').classList.remove('hidden'); } } if(tab === 'bday') window.app.loadBday(); else window.app.loadFeed(tab, false); } },
+            nav: (tab) => { currentTab = tab; lastVisibleDoc = null; document.getElementById('post-content').value = ''; window.app.clearImg(); if (unsubscribeFeed) { unsubscribeFeed(); unsubscribeFeed = null; } document.getElementById('dashboard-view').classList.remove('active-block'); document.getElementById('detail-view').classList.add('active-block'); window.scrollTo(0, 0); const titles = { diary: 'Nhật Ký', pets: 'Thú Cưng', chat: 'Hỏi Đáp', notif: 'Thông Báo', stars: 'Học Sinh Ngoan', bday: 'Sinh Nhật', quiz: 'Thi Trắc Nghiệm', gift: 'Góc Đổi Quà', admin: 'Quản Lý', settings: 'Cài Đặt', shop: 'Góc Đổi Quà', petgame: 'Nuôi Thú Ảo' }; document.getElementById('page-title').textContent = titles[tab] || 'Chi Tiết'; document.getElementById('post-form').classList.add('hidden'); document.getElementById('star-admin-form').classList.add('hidden'); document.getElementById('admin-panel').classList.add('hidden'); document.getElementById('settings-panel').classList.add('hidden'); document.getElementById('shop-container').classList.add('hidden'); document.getElementById('petgame-container').classList.add('hidden'); document.getElementById('feed').classList.add('hidden'); document.getElementById('load-more-container').classList.add('hidden'); document.getElementById('quiz-container').classList.add('hidden'); const feedEl = document.getElementById('feed');
+// 1. Reset lại nút ảnh (để các trang khác vẫn hiện nút ảnh bình thường)
+const imgLabel = document.querySelector('#post-form label');
+if(imgLabel) imgLabel.classList.remove('hidden'); 
+document.getElementById('post-content').placeholder = "Viết gì đó...";
+ if(tab === 'quiz') { document.getElementById('quiz-container').classList.remove('hidden'); window.app.initQuiz(); 
+} else if (tab === 'private') { 
+    // === 2. THÊM ĐOẠN XỬ LÝ CHO TAB 'private' ===
+    document.getElementById('page-title').textContent = "Nhật Ký Cá Nhân";
+    document.getElementById('feed').classList.remove('hidden');
+    window.app.loadPrivateDiary(); // Gọi hàm mới viết ở Bước 3
+
+} else if(tab === 'shop') { document.getElementById('shop-container').classList.remove('hidden'); window.app.renderInventory(); } else if(tab === 'petgame') { document.getElementById('petgame-container').classList.remove('hidden'); window.app.renderPetGame(); } else if(tab === 'admin') { if(currentUser.role !== 'admin') { window.app.goHome(); return; } document.getElementById('admin-panel').classList.remove('hidden'); window.app.loadUsers(); window.app.loadStudentsForReward(); } else if (tab === 'settings') { document.getElementById('settings-panel').classList.remove('hidden'); document.getElementById('settings-user-name').textContent = currentUser.name; document.getElementById('avatar-preview').src = currentUser.avatarUrl || 'https://via.placeholder.com/96x96?text=Avt'; } else { feedEl.innerHTML = '<div class="text-center mt-4 text-gray-500">Đang tải dữ liệu...</div>'; feedEl.classList.remove('hidden'); if(currentUser.role === 'admin' || !['notif', 'stars', 'bday'].includes(tab)) { if (tab === 'stars' && currentUser.role === 'admin') { document.getElementById('star-admin-form').classList.remove('hidden'); window.app.loadStudentsForSelection(); } else { document.getElementById('post-form').classList.remove('hidden'); } } if(tab === 'bday') window.app.loadBday(); else window.app.loadFeed(tab, false); } },
             loadUsers: () => { getDocs(collection(db, `artifacts/${appId}/users`)).then(snap => { document.getElementById('user-list').innerHTML = snap.docs.map(d => { const u = d.data(); return `<div class="flex justify-between items-center p-3 bg-gray-50 rounded border mb-2"><div><b>${u.name}</b> <span class="text-xs text-gray-500">(${u.username}) - ${u.points||0} xu</span></div><button onclick="window.app.delUser('${d.id}')" class="text-red-500"><i data-lucide="trash-2" width="16"></i></button></div>`; }).join(''); lucide.createIcons(); }); },
             createUser: async () => { const u = document.getElementById('new-u').value; const p = document.getElementById('new-p').value; const n = document.getElementById('new-n').value; const d = document.getElementById('new-d').value; if(!u || !p || !n) return alert("Thiếu thông tin!"); await addDoc(collection(db, `artifacts/${appId}/users`), { username: u, password: p, name: n, dob: d, role: 'student', avatarUrl: '', points: 0, inventory: [] }); alert("Đã tạo!"); document.getElementById('new-u').value = ''; document.getElementById('new-p').value = ''; document.getElementById('new-n').value = ''; document.getElementById('new-d').value = ''; },
             delUser: async (id) => { if(confirm("Xóa?")) { await deleteDoc(doc(db, `artifacts/${appId}/users`, id)); window.app.loadUsers(); } },
@@ -1971,9 +2027,64 @@ buyPetItem: async (price, type, val) => {
                 if((currentUser.coins||0) < 300) return alert("Cần 300 xu!");
                 try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-300), "pet.isDead": false, "pet.hunger": 50, "pet.lastUpdate": Date.now() }); } catch(e){}
             },
-            resetPet: async () => { if(confirm("Mất hết cấp độ?")) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: null }); } catch(e){} }
-        };
+            resetPet: async () => { if(confirm("Mất hết cấp độ?")) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: null }); } catch(e){} },
+        
+// --- HÀM CHO NHẬT KÝ CÁ NHÂN (Được đưa vào trong window.app) ---
+            loadPrivateDiary: () => {
+                const el = document.getElementById('feed');
+                el.innerHTML = '<div class="text-center mt-10"><div class="animate-spin inline-block w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full"></div><p class="text-purple-600 mt-2 font-bold">Đang mở cuốn nhật ký bí mật...</p></div>';
+                
+                document.getElementById('post-form').classList.remove('hidden');
+                const imgBtn = document.querySelector('#post-form label');
+                if(imgBtn) imgBtn.classList.add('hidden'); 
+                document.getElementById('post-content').placeholder = "Ngày hôm nay của con thế nào? (Chỉ con mới đọc được dòng này)...";
 
+                if (window.app.unsubscribeFeed) {
+                    window.app.unsubscribeFeed();
+                    window.app.unsubscribeFeed = null;
+                }
+                
+                const q = query(collection(db, `artifacts/${appId}/posts_private`), orderBy('date', 'desc'), limit(50));
+                
+                window.app.unsubscribeFeed = onSnapshot(q, (snap) => {
+                    el.innerHTML = '';
+                    let myPostsCount = 0;
+
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        if (d.uid === currentUser.id) {
+                            myPostsCount++;
+                            const dateStr = new Date(d.date).toLocaleString('vi-VN', { 
+                                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                            });
+
+                            const div = document.createElement('div');
+                            div.className = "mb-4 animate-zoom-in";
+                            div.innerHTML = `
+                                <div class="private-note">
+                                    <div class="flex justify-between items-start">
+                                        <div class="private-date">📅 ${dateStr}</div>
+                                        <button onclick="window.app.delPost('private','${doc.id}')" class="text-gray-400 hover:text-red-500 bg-white/50 rounded-full p-1"><i data-lucide="trash-2" width="14"></i></button>
+                                    </div>
+                                    <div class="text-slate-800 whitespace-pre-wrap break-words text-base font-medium" style="word-break: break-word; overflow-wrap: break-word;">${d.content}</div>
+                                </div>
+                            `;
+                            el.appendChild(div);
+                        }
+                    });
+
+                    if (myPostsCount === 0) {
+                        el.innerHTML = `
+                            <div class="text-center mt-10 opacity-60">
+                                <div class="text-6xl mb-4">📔</div>
+                                <p class="text-purple-800 font-bold">Cuốn nhật ký này chưa có trang nào.</p>
+                                <p class="text-sm">Hãy viết dòng tâm sự đầu tiên ở bên trên nhé!</p>
+                            </div>`;
+                    }
+                    lucide.createIcons();
+                });
+            }
+        }; // <--- DẤU ĐÓNG NGOẶC CỦA window.app PHẢI NẰM TẬN DƯỚI CÙNG NÀY
         init();
     </script>
 <footer class="text-center text-lg text-gray-500 py-4 mt-8 bg-white border-t">
