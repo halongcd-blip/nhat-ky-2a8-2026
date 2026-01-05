@@ -385,14 +385,19 @@
                 <div id="banner-placeholder" class="h-40 bg-gray-200 flex items-center justify-center text-gray-500 text-sm hidden">Chưa có banner.</div>
             </div>
 
-            <div class="mb-6">
-                <h2 class="text-base md:text-lg font-bold bg-white/80 inline-block px-4 py-2 rounded-xl backdrop-blur-sm shadow-sm greeting-text">
-                    Chào, <span id="user-name" class="greeting-text">...</span>! <span id="wave-icon">👋</span>
-                </h2>
-                <div id="online-users-container" class="hidden">
-                    <span class="online-dot"></span> <span id="online-users-list">Đang tải...</span>
-                </div>
-            </div>
+            <div class="mb-6 flex flex-wrap items-center gap-3">
+    <h2 class="text-base md:text-lg font-bold bg-white/80 px-4 py-2 rounded-xl backdrop-blur-sm shadow-sm greeting-text">
+        Chào, <span id="user-name" class="greeting-text">...</span>! <span id="wave-icon">👋</span>
+    </h2>
+    
+    <button id="btn-checkin" onclick="window.app.dailyCheckIn()" class="bg-gradient-to-r from-emerald-400 to-green-600 text-white px-3 py-2 rounded-xl font-bold shadow-md hover:scale-105 transition flex items-center gap-1 text-sm animate-pulse">
+        <i data-lucide="calendar-check" width="16"></i> <span>Điểm Danh</span>
+    </button>
+
+    <div id="online-users-container" class="hidden w-full mt-1">
+        <span class="online-dot"></span> <span id="online-users-list">Đang tải...</span>
+    </div>
+</div>
 
             <div id="quick-chat-box">
                 <div class="px-4 py-2 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center">
@@ -1482,6 +1487,65 @@ buyPetItem: async (price, type, val) => {
         console.error("Lỗi check sinh nhật:", e);
     }
 },
+// --- TÍNH NĂNG ĐIỂM DANH HÀNG NGÀY ---
+            
+            // 1. Hàm kiểm tra trạng thái (để hiện màu xám nếu đã bấm rồi)
+            checkCheckInStatus: () => {
+                const btn = document.getElementById('btn-checkin');
+                if (!btn) return;
+                
+                // Lấy ngày hiện tại theo định dạng chuỗi (VD: "Mon Jan 05 2026")
+                // Dùng toDateString() để đảm bảo mỗi ngày chỉ tính 1 lần bất kể giờ phút
+                const today = new Date().toDateString(); 
+                
+                // Nếu trong database đã lưu ngày này rồi -> Khóa nút lại
+                if (currentUser.lastCheckIn === today) {
+                    btn.disabled = true;
+                    btn.className = "bg-gray-300 text-gray-500 px-3 py-2 rounded-xl font-bold flex items-center gap-1 text-sm cursor-default border border-gray-200";
+                    btn.innerHTML = '<i data-lucide="check" width="16"></i> <span>Đã điểm danh</span>';
+                    lucide.createIcons(); // Vẽ lại icon
+                }
+            },
+
+            // 2. Hàm xử lý khi bấm nút
+            dailyCheckIn: async () => {
+                const today = new Date().toDateString();
+                
+                // Kiểm tra lại lần nữa cho chắc
+                if (currentUser.lastCheckIn === today) return;
+
+                // Hiệu ứng bấm nút
+                const btn = document.getElementById('btn-checkin');
+                btn.innerHTML = '<div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div> Xử lý...';
+
+                try {
+                    // Cộng 10 xu và lưu ngày điểm danh vào Firebase
+                    await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), {
+                        coins: increment(10),
+                        lastCheckIn: today
+                    });
+                    
+                    // Cập nhật dữ liệu cục bộ ngay lập tức (để không phải tải lại trang)
+                    currentUser.coins = (currentUser.coins || 0) + 10;
+                    currentUser.lastCheckIn = today;
+                    document.getElementById('current-coins').textContent = currentUser.coins;
+                    
+                    // Cập nhật giao diện nút bấm
+                    window.app.checkCheckInStatus();
+                    
+                    // Thông báo và hiệu ứng ăn mừng
+                    alert("🎉 Điểm danh thành công! Bạn nhận được 10 Xu.");
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                    
+                } catch(e) {
+                    console.error(e);
+                    alert("Lỗi: " + e.message);
+                    // Nếu lỗi thì trả lại nút cũ
+                    btn.innerHTML = '<i data-lucide="calendar-check" width="16"></i> <span>Điểm Danh</span>';
+                    lucide.createIcons();
+                }
+            },
+
             initQuiz: async () => { try { const qSnap = await getDoc(QUIZ_DATA_DOC(db)); if(qSnap.exists()) { activeQuestions = qSnap.data().list || []; } else { activeQuestions = [{ q: "Con gì tám cẳng hai càng?", options: ["Con cua", "Con gà", "Con chó", "Con mèo"], a: 0 }]; } } catch(e) { console.error(e); } if(quizStatusListener) quizStatusListener(); quizStatusListener = onSnapshot(QUIZ_GLOBAL_DOC(db), (docSnap) => { const status = docSnap.exists() ? docSnap.data().status : 'waiting'; window.app.renderQuizUI(status); }); if(currentUser.role === 'admin') { if(quizLiveScoreListener) quizLiveScoreListener(); quizLiveScoreListener = onSnapshot(collection(db, `artifacts/${appId}/quiz_results`), (snap) => { const list = []; snap.forEach(d => list.push(d.data())); list.sort((a,b) => b.score - a.score); const html = list.map(u => `<div class="flex justify-between border-b p-1"><span>${u.name}</span><span class="font-bold text-purple-600">${u.score}</span></div>`).join(''); document.getElementById('quiz-live-score').innerHTML = html || 'Chưa có dữ liệu'; if(document.getElementById('quiz-result').classList.contains('hidden') === false) { const top5 = list.slice(0,5).map((u,i) => `<div class="flex items-center gap-2"><span class="font-bold text-yellow-600">#${i+1}</span> <img src="${window.app.userCache[u.uid]?.avatarUrl || 'https://via.placeholder.com/20'}" class="w-6 h-6 rounded-full"> <span>${u.name}</span> <span class="ml-auto font-bold">${u.score}đ</span></div>`).join(''); document.getElementById('quiz-top5-list').innerHTML = top5; document.getElementById('quiz-top5').classList.remove('hidden'); } }); } },
             openQuizEditor: () => { const container = document.getElementById('editor-questions-list'); container.innerHTML = ''; activeQuestions.forEach((q, idx) => { container.appendChild(window.app.createEditorItem(idx, q)); }); document.getElementById('quiz-editor').classList.remove('hidden'); },
             createEditorItem: (idx, data = { q: '', options: ['', '', '', ''], a: 0 }) => { const div = document.createElement('div'); div.className = "bg-white p-4 rounded-xl shadow border border-gray-200"; div.innerHTML = `<div class="flex justify-between mb-2"><span class="font-bold text-purple-700">Câu ${idx + 1}</span><button onclick="this.parentElement.parentElement.remove()" class="text-red-500 text-xs font-bold">Xóa</button></div><input class="w-full p-2 border rounded mb-2 font-bold" placeholder="Nhập câu hỏi..." value="${data.q}"><div class="grid grid-cols-1 gap-2">${[0,1,2,3].map(i => `<div class="flex items-center gap-2"><input type="radio" name="correct_${idx}" ${data.a === i ? 'checked' : ''} class="w-4 h-4 accent-green-600"><input class="flex-1 p-2 border rounded text-sm" placeholder="Đáp án ${i+1}" value="${data.options[i]}"></div>`).join('')}</div>`; return div; },
@@ -1506,6 +1570,8 @@ buyPetItem: async (price, type, val) => {
     document.getElementById('current-coins').textContent = currentUser.coins || 0;
     window.app.loadBanner();
     window.app.loadChat();
+// === THÊM DÒNG NÀY VÀO ===
+    window.app.checkCheckInStatus();
     // window.app.checkDailyBirthday();  <--- ĐÃ TẮT: Thêm 2 dấu gạch chéo ở đầu
     window.app.checkNotifications();
     window.app.reportOnline();
@@ -1688,19 +1754,104 @@ buyPetItem: async (price, type, val) => {
             },
             loadBdayComments: (uid) => { onSnapshot(query(collection(db, `artifacts/${appId}/users/${uid}/wishes`), orderBy('time','asc')), snap => { const cEl = document.getElementById('comments-bday'); if(cEl) cEl.innerHTML = snap.empty ? '<i class="text-xs text-gray-400">Chưa có lời chúc nào.</i>' : snap.docs.map(d=> `<div class="text-xs bg-gray-50 p-1 rounded"><b>${d.data().user}:</b> ${d.data().text}</div>`).join(''); }); },
             cmtBdayBtn: (uid) => { const val = document.getElementById('i-bday').value.trim(); if(val) { addDoc(collection(db, `artifacts/${appId}/users/${uid}/wishes`), { user: currentUser.name, text: val, time: new Date().toISOString() }); document.getElementById('i-bday').value = ''; } },
-            post: async () => { if(!db) return; const txt = document.getElementById('post-content').value.trim(); const file = document.getElementById('file-input').files[0]; if(!txt && !file) return; const btn = document.getElementById('btn-post'); btn.textContent = 'Đang đăng...'; btn.disabled = true; try { let imgUrl = null; if(file) { const compressedFile = await compressImage(file); const sRef = storageRef(getStorage(), `artifacts/${appId}/posts_${currentTab}/${Date.now()}_compressed.jpg`); const snap = await uploadBytes(sRef, compressedFile); imgUrl = await getDownloadURL(snap.ref); } await addDoc(collection(db, `artifacts/${appId}/posts_${currentTab}`), { content: txt, image: imgUrl, author: currentUser.name, uid: currentUser.id, avatarUrl: currentUser.avatarUrl || '', date: new Date().toISOString(), likes: [], comments: [] }); document.getElementById('post-content').value = ''; window.app.clearImg(); } catch(e) { alert("Lỗi: " + e.message); } finally { btn.textContent = 'Đăng'; btn.disabled = false; } },
+            post: async () => { 
+                if(!db) return; 
+                const txt = document.getElementById('post-content').value.trim(); 
+                const file = document.getElementById('file-input').files[0]; 
+                if(!txt && !file) return; 
+                
+                const btn = document.getElementById('btn-post'); 
+                btn.textContent = 'Đang đăng...'; 
+                btn.disabled = true; 
+                
+                try { 
+                    let imgUrl = null; 
+                    if(file) { 
+                        const compressedFile = await compressImage(file); 
+                        const sRef = storageRef(getStorage(), `artifacts/${appId}/posts_${currentTab}/${Date.now()}_compressed.jpg`); 
+                        const snap = await uploadBytes(sRef, compressedFile); 
+                        imgUrl = await getDownloadURL(snap.ref); 
+                    } 
+                    
+                    // 1. Đăng bài viết
+                    await addDoc(collection(db, `artifacts/${appId}/posts_${currentTab}`), { 
+                        content: txt, 
+                        image: imgUrl, 
+                        author: currentUser.name, 
+                        uid: currentUser.id, 
+                        avatarUrl: currentUser.avatarUrl || '', 
+                        date: new Date().toISOString(), 
+                        likes: [], 
+                        comments: [] 
+                    }); 
+
+                    // 2. TỰ ĐỘNG CỘNG 10 XU (ÂM THẦM)
+                    await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                        coins: increment(10) 
+                    });
+
+                    // Reset giao diện
+                    document.getElementById('post-content').value = ''; 
+                    window.app.clearImg(); 
+                    
+                } catch(e) { 
+                    alert("Lỗi: " + e.message); 
+                } finally { 
+                    btn.textContent = 'Đăng'; 
+                    btn.disabled = false; 
+                } 
+            },
             handleImg: (inp) => { if(inp.files[0]) { const r = new FileReader(); r.onload = e => { document.getElementById('img-preview').src = e.target.result; document.getElementById('preview-area').classList.remove('hidden'); }; r.readAsDataURL(inp.files[0]); } },
             clearImg: () => { document.getElementById('file-input').value = ''; document.getElementById('preview-area').classList.add('hidden'); },
-            like: (tab, id, liked) => { const ref = doc(db, `artifacts/${appId}/posts_${tab}`, id); updateDoc(ref, { likes: liked ? arrayRemove(currentUser.id) : arrayUnion(currentUser.id) }).then(() => {}); },
+            like: async (tab, id, liked) => { 
+                // 1. CHẶN THU HỒI TIM & CHẶN BẤM NHIỀU LẦN
+                if (liked) return; 
+
+                // 2. HIỆU ỨNG TỨC THÌ (Không nhảy nhót nữa)
+                // Tìm cái nút vừa bấm
+                const btn = document.querySelector(`button[onclick="window.app.like('${tab}', '${id}', ${liked})"]`);
+                
+                // Nếu tìm thấy nút, ta đổi màu nó sang đỏ và khóa lại ngay
+                if(btn) {
+                    btn.classList.remove('text-gray-400', 'text-gray-500'); // Xóa màu xám
+                    btn.classList.add('text-red-500', 'font-bold'); // Thêm màu đỏ
+                    btn.disabled = true; // Khóa cứng nút lại, không cho bấm nữa
+                    
+                    // Sửa lại số lượng like ảo (tăng lên 1 ngay lập tức cho vui mắt)
+                    const countSpan = btn.querySelector('span');
+                    if(countSpan) {
+                        let currentCount = parseInt(countSpan.textContent) || 0;
+                        countSpan.textContent = currentCount + 1;
+                    }
+                }
+
+                const ref = doc(db, `artifacts/${appId}/posts_${tab}`, id); 
+                
+                try {
+                    // 3. GỬI LÊN SERVER
+                    await updateDoc(ref, { 
+                        likes: arrayUnion(currentUser.id) 
+                    });
+
+                    // 4. CỘNG 5 XU
+                    await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                        coins: increment(5) 
+                    });
+
+                } catch(e) {
+                    console.error("Lỗi like:", e);
+                    // Nếu lỗi mạng thì báo người dùng biết
+                    if(btn) btn.classList.remove('text-red-500'); 
+                }
+            },
 // Hàm xử lý nút Gửi comment
             cmtBtn: async (tab, id) => { 
-                // Tìm ô nhập liệu có id bắt đầu bằng 'cmt-'
                 const inputEl = document.getElementById(`cmt-${id}`);
                 const val = inputEl ? inputEl.value.trim() : ''; 
                 
                 if(val) { 
                     try {
-                        // Gửi dữ liệu lên hệ thống
+                        // 1. Gửi bình luận
                         await updateDoc(doc(db, `artifacts/${appId}/posts_${tab}`, id), { 
                             comments: arrayUnion({ 
                                 user: currentUser.name, 
@@ -1709,13 +1860,20 @@ buyPetItem: async (price, type, val) => {
                                 time: new Date().toISOString() 
                             }) 
                         });
-                        // Gửi xong thì xóa trắng ô nhập
+
+                        // 2. TỰ ĐỘNG CỘNG 5 XU (ÂM THẦM)
+                        await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                            coins: increment(5) 
+                        });
+
+                        // Xóa ô nhập
                         inputEl.value = ''; 
+                        console.log("Đã cộng 5 xu bình luận (âm thầm)");
+                        
                     } catch (e) {
                         alert("Lỗi gửi comment: " + e.message);
                     }
                 } else {
-                    // Nếu chưa nhập gì mà bấm gửi
                     alert("Bạn chưa nhập nội dung bình luận!");
                 }
             },
