@@ -1318,28 +1318,26 @@
             }
         },
 
-     processPetResponse: async (text) => {
+    processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // 1. CHUẨN BỊ HỒ SƠ (Giữ nguyên để nó thông minh)
+                // 1. CHUẨN BỊ HỒ SƠ
                 let ownerName = currentUser?.name || "Chủ nhân";
                 let petName = currentUser?.pet?.name || "Bé cưng";
-                
-                // Dịch loại thú
                 const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
                 let petTypeVN = typeMap[currentUser?.pet?.type] || "thú cưng";
 
                 // 2. CẤU HÌNH LỜI NHẮC (PROMPT)
                 const context = `Đóng vai: ${petTypeVN} tên "${petName}". Chủ: "${ownerName}".
-                                 Yêu cầu: Nói Tiếng Việt, giọng trẻ con, ngắn gọn (dưới 20 từ).
+                                 Yêu cầu: Nói Tiếng Việt 100%, giọng trẻ con, ngắn gọn (dưới 20 từ).
                                  Câu nói: "${text}"`;
 
-                // 3. GỌI THẲNG MODEL FLASH (BỎ QUA DÒ TÌM ĐỂ TĂNG TỐC)
-                // gemini-1.5-flash là model nhanh nhất hiện nay của Google
+                // 3. GỌI THẲNG MODEL FLASH (QUAN TRỌNG: KHÔNG DÙNG listModels NỮA)
+                // Dùng model 1.5-flash chạy siêu nhanh và tương thích tốt với Key bảo mật
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
@@ -1350,7 +1348,7 @@
                 
                 const data = await res.json();
                 
-                // Xử lý lỗi nếu 1.5 Flash không chạy (Fallback sang Pro)
+                // Nếu 1.5 Flash lỗi, tự động chuyển sang Pro
                 if (data.error) {
                     console.warn("Flash lỗi, thử dùng Pro...", data.error);
                     const urlPro = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
@@ -1367,19 +1365,16 @@
                     var reply = data.candidates[0].content.parts[0].text;
                 }
 
-                // 4. HIỂN THỊ & NÓI NGAY
+                // 4. HIỂN THỊ & NÓI
                 chatText.textContent = reply;
                 window.app.speak(reply);
                 
-                // Hiệu ứng nhảy
                 if(window.app.animatePetClick) window.app.animatePetClick();
-
-                // Tắt bong bóng chat nhanh hơn (5s) để cảm giác lanh lợi
-                setTimeout(() => bubble.classList.add('hidden'), 5000);
+                setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
                 console.error("Lỗi:", e);
-                chatText.textContent = "Hic... mạng lag quá ạ 😿";
+                chatText.textContent = "Hic... mạng lag quá ạ 😿 (Lỗi: " + e.message + ")";
             }
         },
         
@@ -1503,6 +1498,7 @@
 </body>
 
 </html>
+
 
 
 
