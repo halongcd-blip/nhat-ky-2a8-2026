@@ -1319,31 +1319,36 @@
         },
 
       processPetResponse: async (text) => {
+            console.log("--- ĐÃ CẬP NHẬT CODE TỰ ĐỘNG TÌM MODEL ---"); // Dòng này để kiểm tra
+            
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // BƯỚC 1: Tự động hỏi Google xem có những model nào
+                // BƯỚC 1: Lấy danh sách các model mà dự án của bạn CÓ QUYỀN SỬ DỤNG
                 const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
                 const listRes = await fetch(listUrl);
                 const listData = await listRes.json();
                 
-                if (listData.error) throw new Error(listData.error.message);
+                if (listData.error) throw new Error("Lỗi lấy danh sách Model: " + listData.error.message);
 
-                // BƯỚC 2: Chọn model tốt nhất (Ưu tiên Flash -> Pro -> Bất kỳ cái nào có chữ 'gemini')
-                // Code sẽ tự tìm trong danh sách 50 cái kia để lấy ra 1 cái đúng nhất
+                // BƯỚC 2: Tìm model phù hợp (Ưu tiên Flash -> Pro -> Bất kỳ cái nào là Gemini)
+                // Code sẽ tìm trong danh sách 50 cái kia để lấy ra 1 cái tên chính xác nhất
                 let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini-1.5-pro'));
                 if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini')); // Lấy cái bất kỳ nếu 2 cái trên không có
+                if (!model) model = listData.models.find(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'));
                 
-                if (!model) throw new Error("Không tìm thấy model Gemini nào trong dự án này!");
+                if (!model) throw new Error("Dự án này chưa kích hoạt model Gemini nào cả!");
 
-                console.log("Đang sử dụng model:", model.name); // Xem ở Console để biết nó chọn cái nào
+                // Lấy tên model chuẩn (ví dụ: models/gemini-1.5-flash-001)
+                const modelName = model.name.replace('models/', ''); 
+                console.log("Đang sử dụng model:", modelName); 
 
-                // BƯỚC 3: Gọi API với tên model chính xác vừa tìm được
-                const url = `https://generativelanguage.googleapis.com/v1beta/${model.name}:generateContent?key=${GEMINI_API_KEY}`;
+                // BƯỚC 3: Gọi API với tên model CHÍNH XÁC vừa tìm được
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
@@ -1369,7 +1374,7 @@
 
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
             } catch(e) {
-                console.error(e);
+                console.error("CHI TIẾT LỖI:", e);
                 chatText.textContent = "Lỗi: " + e.message;
             }
         },
