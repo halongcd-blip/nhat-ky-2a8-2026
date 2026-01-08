@@ -1318,39 +1318,42 @@
             }
         },
 
-       processPetResponse: async (text) => {
+      processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
-            const chatText = document.getElementById('pet-chat-text'); // <-- Tên biến là chatText
+            const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // Thử dùng model 1.5 Flash trước
-                let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                // BƯỚC 1: Tự động hỏi Google xem có những model nào
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
                 
-                let res = await fetch(url, {
+                if (listData.error) throw new Error(listData.error.message);
+
+                // BƯỚC 2: Chọn model tốt nhất (Ưu tiên Flash -> Pro -> Bất kỳ cái nào có chữ 'gemini')
+                // Code sẽ tự tìm trong danh sách 50 cái kia để lấy ra 1 cái đúng nhất
+                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini')); // Lấy cái bất kỳ nếu 2 cái trên không có
+                
+                if (!model) throw new Error("Không tìm thấy model Gemini nào trong dự án này!");
+
+                console.log("Đang sử dụng model:", model.name); // Xem ở Console để biết nó chọn cái nào
+
+                // BƯỚC 3: Gọi API với tên model chính xác vừa tìm được
+                const url = `https://generativelanguage.googleapis.com/v1beta/${model.name}:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
                 });
-
-                // Nếu Flash bị lỗi 404, thử tự động chuyển sang Pro
-                if (res.status === 404) {
-                    console.log("Flash lỗi 404, thử chuyển sang Pro...");
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-                    res = await fetch(url, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng trả lời ngắn gọn: " + text }] }] })
-                    });
-                }
                 
                 const data = await res.json();
                 
-                if(data.error) {
-                    console.error("API Error:", data.error);
-                    throw new Error(data.error.message);
-                }
+                if(data.error) throw new Error(data.error.message);
                 
                 const reply = data.candidates[0].content.parts[0].text;
                 chatText.textContent = reply;
@@ -1361,15 +1364,13 @@
                 u.lang = 'vi-VN'; u.rate = 1.1; u.pitch = 1.2;
                 window.speechSynthesis.speak(u);
 
-                // Nhảy
+                // Nhảy vui mừng
                 if(window.app.animatePetClick) window.app.animatePetClick();
 
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
             } catch(e) {
                 console.error(e);
-                // SỬA LỖI: Dùng đúng biến 'chatText' thay vì 'txt'
-                if (e.message.includes('404')) chatText.textContent = "Lỗi 404: Dự án chưa bật API hoặc sai Model.";
-                else chatText.textContent = "Lỗi: " + e.message;
+                chatText.textContent = "Lỗi: " + e.message;
             }
         },
         
