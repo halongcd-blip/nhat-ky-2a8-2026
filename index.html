@@ -1332,8 +1332,9 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
                     chatText.textContent = "Lỗi 404: Dự án chưa bật API 'Generative Language API'.";
                 } else {
                     chatText.textContent = "Hic... mạng chập chờn quá...";
-            }
-        },
+         } // Đóng if/else
+            } // Đóng catch <--- BẠN THIẾU DẤU NÀY
+        }, // Đóng function
 
         speak: (text) => {
             const utterance = new SpeechSynthesisUtterance(text);
