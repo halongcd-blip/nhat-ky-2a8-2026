@@ -1277,73 +1277,95 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
         },
 
         // Hàm xử lý AI (Đã cập nhật Key và Model 1.5 Flash)
-        processPetResponse: async (userText) => {
+        // --- AI CHAT (Dùng Model gemini-1.5-flash) ---
+        startListening: () => {
+            const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
+            const rec = new Speech();
+            rec.lang = 'vi-VN';
+            document.getElementById('btn-mic').classList.add('bg-red-500', 'animate-pulse');
+            rec.start();
+            rec.onresult = (e) => { 
+                const t = e.results[0][0].transcript; 
+                document.getElementById('pet-input-text').value = t; 
+                window.app.processPetResponse(t); 
+            };
+            rec.onend = () => document.getElementById('btn-mic').classList.remove('bg-red-500', 'animate-pulse');
+            rec.onerror = (e) => { 
+                // Không hiện alert lỗi nếu chỉ là lỗi không nghe thấy gì
+                if(e.error !== 'no-speech') console.log("Lỗi Micro:", e.error);
+                document.getElementById('btn-mic').classList.remove('bg-red-500');
+            };
+        },
+
+        sendPetText: () => {
+            const t = document.getElementById('pet-input-text').value;
+            if(t) {
+                document.getElementById('pet-input-text').value = '';
+                window.app.processPetResponse(t);
+            }
+        },
+
+        processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
-            const chatText = document.getElementById('pet-chat-text');
+            const txt = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
-            chatText.textContent = "Đang suy nghĩ... 🤔";
-
+            txt.textContent = "Đang nghĩ...";
+            
             try {
-                // Sử dụng biến GEMINI_API_KEY đã khai báo ở trên
-                const key = (typeof GEMINI_API_KEY !== 'undefined') ? GEMINI_API_KEY : "";
-                
-                if (!key || key.includes("DÁN_KEY")) {
-                    throw new Error("Chưa nhập API Key trong code!");
+                // Kiểm tra Key
+                if (!GEMINI_API_KEY || GEMINI_API_KEY.includes("DÁN_MÃ")) {
+                    throw new Error("Chưa có API Key hợp lệ");
                 }
 
-                // Dùng model 'gemini-1.5-flash' (Chạy nhanh và ít lỗi 404 hơn)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+                // Dùng model 1.5 Flash
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
-                const response = await fetch(url, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [{
-                                text: `Đóng vai thú cưng, trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: "${userText}"`
-                            }]
-                        }]
-                    })
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
                 });
-
-                const data = await response.json();
-
-                if (data.error) {
-                    console.error("Google Error:", data.error);
-                    throw new Error(data.error.message || "Lỗi API");
+                
+                const data = await res.json();
+                
+                if(data.error) {
+                    console.error("Lỗi Google:", data.error);
+                    throw new Error(data.error.message);
                 }
-
-                const aiReply = data.candidates[0].content.parts[0].text;
-                chatText.textContent = aiReply;
+                
+                const reply = data.candidates[0].content.parts[0].text;
+                txt.textContent = reply;
                 
                 // Đọc to
-                if(window.app.speak) window.app.speak(aiReply);
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(reply);
+                u.lang = 'vi-VN'; u.rate = 1.1; u.pitch = 1.2;
+                window.speechSynthesis.speak(u);
+
+                // Nhảy
                 if(window.app.animatePetClick) window.app.animatePetClick();
 
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
-
-            } catch (e) {
+            } catch(e) {
                 console.error(e);
-                if (e.message.includes('404')) {
-                    chatText.textContent = "Lỗi 404: Sai tên Model hoặc chưa bật API.";
-                } else if (e.message.includes('Key')) {
-                    chatText.textContent = "Chưa có Key API!";
-                } else {
-                    chatText.textContent = "Hic... mạng chập chờn quá...";
-         } // Đóng if/else
-            } // Đóng catch <--- BẠN THIẾU DẤU NÀY
-        }, // Đóng function
-
+                if (e.message.includes('404')) txt.textContent = "Lỗi 404: Key bị giới hạn hoặc chưa bật API.";
+                else if (e.message.includes('403')) txt.textContent = "Lỗi 403: Key sai hoặc bị chặn quốc gia.";
+                else txt.textContent = "Hic, lỗi kết nối rồi...";
+            }
+        },
+        
         speak: (text) => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; // Giọng Việt
-            utterance.rate = 1.1; // Nói hơi nhanh cho dễ thương
-            utterance.pitch = 1.2; // Giọng cao (trẻ con)
-            window.speechSynthesis.speak(utterance);
-       }
-            
-        };
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'vi-VN'; u.rate = 1.1; u.pitch = 1.2;
+            window.speechSynthesis.speak(u);
+        }
+    }; // Kết thúc window.app
+
+    // Khởi chạy
     init();
+    window.onload = init;
 </script>
 
 
