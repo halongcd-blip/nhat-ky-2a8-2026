@@ -1319,100 +1319,116 @@
         },
 
       processPetResponse: async (text) => {
-            console.log("--- ĐÃ CẬP NHẬT CODE AI TIẾNG VIỆT ---");
-            
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // Lấy thông tin hiện tại để "nhắc tuồng" cho AI
-                const myName = currentUser.name || "Chủ nhân";
-                const petType = currentUser.pet ? currentUser.pet.type : "thú cưng";
-                const petName = currentUser.pet ? currentUser.pet.name : "bé";
-                
-                // --- CÂU LỆNH NHẮC (PROMPT) QUAN TRỌNG NHẤT ---
-                // Đây là chỗ bắt nó nói Tiếng Việt và đóng vai
-                const context = `Bạn là một chú ${petType} dễ thương tên là "${petName}". 
-                                 Chủ nhân của bạn tên là "${myName}".
-                                 Hãy trả lời câu nói sau đây của chủ nhân bằng Tiếng Việt.
-                                 Giọng điệu: Vui vẻ, nũng nịu, dễ thương, dùng từ ngữ trẻ con (xưng em/bé - gọi chủ nhân/anh/chị).
-                                 Lưu ý: Chỉ trả lời ngắn gọn dưới 20 từ.`;
-                                 
-                const prompt = `${context} \n\nChủ nhân nói: "${text}"`;
-                // ---------------------------------------------------
+                // 1. CHUẨN BỊ HỒ SƠ NHÂN VẬT (Kỹ càng hơn)
+                // Lấy tên người dùng
+                let ownerName = "Chủ nhân";
+                if (currentUser && currentUser.name) ownerName = currentUser.name;
 
+                // Lấy thông tin thú cưng
+                let petName = "Thú cưng";
+                let petTypeVN = "vật nuôi";
+                
+                if (currentUser && currentUser.pet) {
+                    petName = currentUser.pet.name || "Bé cưng";
+                    const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
+                    petTypeVN = typeMap[currentUser.pet.type] || "thú cưng";
+                }
+
+                // 2. CÂU LỆNH "NHẮC TUỒNG" CHO AI (PROMPT)
+                const context = `Bạn đang nhập vai là một chú ${petTypeVN} tên là "${petName}".
+                                 Chủ nhân của bạn tên là "${ownerName}".
+                                 
+                                 NHIỆM VỤ: Hãy trả lời câu nói của chủ nhân.
+                                 
+                                 YÊU CẦU BẮT BUỘC:
+                                 1. Ngôn ngữ: Tiếng Việt 100%.
+                                 2. Giọng điệu: Dễ thương, nũng nịu, lém lỉnh (giống trẻ con).
+                                 3. Xưng hô: Xưng "em" hoặc "bé", gọi đối phương là "chủ nhân" hoặc "anh/chị ${ownerName}".
+                                 4. Độ dài: Ngắn gọn (dưới 25 từ).
+                                 
+                                 Câu nói của chủ nhân: "${text}"`;
+
+                // 3. TỰ ĐỘNG DÒ TÌM MODEL (Giữ nguyên logic dò tìm đã chạy tốt)
                 const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
                 const listRes = await fetch(listUrl);
                 const listData = await listRes.json();
                 
-                if (listData.error) throw new Error(listData.error.message);
-
-                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+                // Ưu tiên Flash -> Pro -> Mọi model Gemini
+                let model = listData.models?.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models?.find(m => m.name.includes('gemini-pro'));
+                if (!model) model = listData.models?.find(m => m.name.includes('gemini'));
                 
-                if (!model) throw new Error("Không tìm thấy model phù hợp");
-
+                if (!model) throw new Error("Không tìm thấy Model AI nào khả dụng.");
+                
                 const modelName = model.name.replace('models/', ''); 
+
+                // 4. GỬI LỆNH
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-                
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: context }] }] })
                 });
                 
                 const data = await res.json();
-                if(data.error) throw new Error(data.error.message);
                 
+                if (data.error) throw new Error(data.error.message);
+                if (!data.candidates || !data.candidates[0].content) throw new Error("AI không trả lời được.");
+
                 const reply = data.candidates[0].content.parts[0].text;
                 
-                // Hiển thị và nói
+                // Hiển thị & Nói
                 chatText.textContent = reply;
                 window.app.speak(reply);
                 if(window.app.animatePetClick) window.app.animatePetClick();
 
-                setTimeout(() => bubble.classList.add('hidden'), 6000);
+                setTimeout(() => bubble.classList.add('hidden'), 8000); // Bong bóng hiện lâu hơn chút (8s) để kịp đọc
+
             } catch(e) {
-                console.error("CHI TIẾT LỖI:", e);
-                chatText.textContent = "Hic, em chưa hiểu ý chủ nhân...";
+                console.error("Lỗi AI:", e);
+                chatText.textContent = "Hic... em không nghe rõ ạ 😿";
             }
         },
         
         speak: (text) => {
-            // Ngắt lời cũ nếu đang nói dở
+            // Hủy câu nói cũ
             window.speechSynthesis.cancel();
 
-            const u = new SpeechSynthesisUtterance(text);
-            
-            // 1. Ép buộc ngôn ngữ Tiếng Việt
-            u.lang = 'vi-VN'; 
-            u.pitch = 1.4; // Giọng cao hơn chút cho giống thú cưng
-            u.rate = 1.1;  // Tốc độ nhanh nhẹn
+            // Hàm đệ quy để thử lại nếu danh sách giọng chưa tải kịp
+            const trySpeaking = (retryCount = 0) => {
+                const voices = window.speechSynthesis.getVoices();
+                
+                // Tìm giọng Tiếng Việt (Ưu tiên Google, Microsoft, hoặc bất kỳ cái nào có 'vi', 'VN')
+                let vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google')); // Google hay nhất
+                if (!vnVoice) vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('An')); // Microsoft An
+                if (!vnVoice) vnVoice = voices.find(v => v.lang.includes('vi')); // Bất kỳ giọng Việt nào
 
-            // 2. TÌM GIỌNG ĐỌC TIẾNG VIỆT CHUẨN (Quan trọng)
-            const voices = window.speechSynthesis.getVoices();
-            
-            // Ưu tiên giọng Google Tiếng Việt hoặc giọng Microsoft Vietnamese
-            let vnVoice = voices.find(v => v.lang === 'vi-VN' && v.name.includes('Google'));
-            if (!vnVoice) vnVoice = voices.find(v => v.lang === 'vi-VN'); // Tìm bất kỳ giọng VN nào
-            
-            if (vnVoice) {
-                u.voice = vnVoice;
-                console.log("Đang dùng giọng:", vnVoice.name);
-            }
+                // Nếu chưa tìm thấy giọng và chưa thử quá 5 lần -> Đợi chút rồi thử lại
+                if (!vnVoice && retryCount < 10) {
+                    setTimeout(() => trySpeaking(retryCount + 1), 100);
+                    return;
+                }
 
-            // Xử lý lỗi trên Chrome (đôi khi danh sách giọng load chậm)
-            if (voices.length === 0) {
-                window.speechSynthesis.onvoiceschanged = () => {
-                    const updatedVoices = window.speechSynthesis.getVoices();
-                    const v = updatedVoices.find(v => v.lang === 'vi-VN');
-                    if (v) u.voice = v;
-                    window.speechSynthesis.speak(u);
-                };
-            } else {
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'vi-VN';
+                
+                if (vnVoice) {
+                    u.voice = vnVoice;
+                    console.log("Đã chọn giọng:", vnVoice.name);
+                    u.pitch = 1.5; // Tăng cao độ (0-2) -> Giọng trẻ con/thú cưng
+                    u.rate = 1.1;  // Tốc độ nhanh nhẹn
+                } else {
+                    console.warn("Máy chưa cài giọng Tiếng Việt! Đang dùng giọng mặc định.");
+                    // Nếu không có giọng Việt, vẫn cố chỉnh cao độ cho đỡ ồm
+                    u.pitch = 1.4; 
+                }
+
                 window.speechSynthesis.speak(u);
             }
     }; // Kết thúc window.app
@@ -1496,6 +1512,7 @@
 </body>
 
 </html>
+
 
 
 
