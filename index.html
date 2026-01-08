@@ -1320,19 +1320,30 @@
 
        processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
-            const chatText = document.getElementById('pet-chat-text');
+            const chatText = document.getElementById('pet-chat-text'); // <-- Tên biến là chatText
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // Sử dụng model mới nhất gemini-1.5-flash cho dự án mới
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                // Thử dùng model 1.5 Flash trước
+                let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
-                const res = await fetch(url, {
+                let res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
                 });
+
+                // Nếu Flash bị lỗi 404, thử tự động chuyển sang Pro
+                if (res.status === 404) {
+                    console.log("Flash lỗi 404, thử chuyển sang Pro...");
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+                    res = await fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng trả lời ngắn gọn: " + text }] }] })
+                    });
+                }
                 
                 const data = await res.json();
                 
@@ -1342,7 +1353,7 @@
                 }
                 
                 const reply = data.candidates[0].content.parts[0].text;
-                txt.textContent = reply;
+                chatText.textContent = reply;
                 
                 // Đọc to
                 window.speechSynthesis.cancel();
@@ -1356,9 +1367,9 @@
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
             } catch(e) {
                 console.error(e);
-                // Hiển thị lỗi chi tiết để dễ kiểm tra
-                if (e.message.includes('404')) txt.textContent = "Lỗi 404: Dự án chưa bật API hoặc sai tên Model.";
-                else txt.textContent = "Lỗi: " + e.message;
+                // SỬA LỖI: Dùng đúng biến 'chatText' thay vì 'txt'
+                if (e.message.includes('404')) chatText.textContent = "Lỗi 404: Dự án chưa bật API hoặc sai Model.";
+                else chatText.textContent = "Lỗi: " + e.message;
             }
         },
         
