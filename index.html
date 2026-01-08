@@ -1318,20 +1318,18 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
             }
         },
 
-        processPetResponse: async (text) => {
+       processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const txt = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             txt.textContent = "Đang nghĩ...";
             
             try {
-                // Kiểm tra Key
-                if (!GEMINI_API_KEY || GEMINI_API_KEY.includes("DÁN_MÃ")) {
-                    throw new Error("Chưa có API Key hợp lệ");
-                }
+                // SỬA LỖI: Dùng trực tiếp GEMINI_API_KEY để không bị lỗi "key is not defined"
+                // Đảm bảo bạn đã khai báo const GEMINI_API_KEY = "..." ở đầu file script
+                if (typeof GEMINI_API_KEY === 'undefined') throw new Error("Thiếu dòng khai báo GEMINI_API_KEY ở đầu script!");
 
-                // Dùng model 1.5 Flash
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
@@ -1342,7 +1340,7 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
                 const data = await res.json();
                 
                 if(data.error) {
-                    console.error("Lỗi Google:", data.error);
+                    console.error("API Error:", data.error);
                     throw new Error(data.error.message);
                 }
                 
@@ -1361,9 +1359,7 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
             } catch(e) {
                 console.error(e);
-                if (e.message.includes('404')) txt.textContent = "Lỗi 404: Key bị giới hạn hoặc chưa bật API.";
-                else if (e.message.includes('403')) txt.textContent = "Lỗi 403: Key sai hoặc bị chặn quốc gia.";
-                else txt.textContent = "Hic, lỗi kết nối rồi...";
+                txt.textContent = "Lỗi: " + e.message;
             }
         },
         
@@ -1454,4 +1450,5 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 </body>
 
 </html>
+
 
