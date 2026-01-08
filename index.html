@@ -1382,25 +1382,39 @@
         },
         
         speak: (text) => {
-            // Ngừng câu đang nói dở (nếu có)
+            // Ngắt lời cũ nếu đang nói dở
             window.speechSynthesis.cancel();
 
             const u = new SpeechSynthesisUtterance(text);
             
-            // 1. Cấu hình Tiếng Việt
+            // 1. Ép buộc ngôn ngữ Tiếng Việt
             u.lang = 'vi-VN'; 
-            
-            // 2. Chỉnh giọng cho giống thú cưng (Cao và nhanh hơn)
-            u.pitch = 1.6; // Cao độ (0-2). 1.6 là giọng trẻ con/thú cưng
-            u.rate = 1.1;  // Tốc độ (0.1-10). 1.1 là nói nhanh nhẹn
+            u.pitch = 1.4; // Giọng cao hơn chút cho giống thú cưng
+            u.rate = 1.1;  // Tốc độ nhanh nhẹn
 
-            // 3. Cố gắng tìm giọng Google Tiếng Việt (nếu có)
+            // 2. TÌM GIỌNG ĐỌC TIẾNG VIỆT CHUẨN (Quan trọng)
             const voices = window.speechSynthesis.getVoices();
-            const vnVoice = voices.find(v => v.lang.includes('vi'));
-            if (vnVoice) u.voice = vnVoice;
+            
+            // Ưu tiên giọng Google Tiếng Việt hoặc giọng Microsoft Vietnamese
+            let vnVoice = voices.find(v => v.lang === 'vi-VN' && v.name.includes('Google'));
+            if (!vnVoice) vnVoice = voices.find(v => v.lang === 'vi-VN'); // Tìm bất kỳ giọng VN nào
+            
+            if (vnVoice) {
+                u.voice = vnVoice;
+                console.log("Đang dùng giọng:", vnVoice.name);
+            }
 
-            window.speechSynthesis.speak(u);
-        }
+            // Xử lý lỗi trên Chrome (đôi khi danh sách giọng load chậm)
+            if (voices.length === 0) {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    const updatedVoices = window.speechSynthesis.getVoices();
+                    const v = updatedVoices.find(v => v.lang === 'vi-VN');
+                    if (v) u.voice = v;
+                    window.speechSynthesis.speak(u);
+                };
+            } else {
+                window.speechSynthesis.speak(u);
+            }
     }; // Kết thúc window.app
 
     // Khởi chạy
@@ -1482,6 +1496,7 @@
 </body>
 
 </html>
+
 
 
 
