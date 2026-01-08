@@ -1254,42 +1254,7 @@
         quizAdmin: async (action) => { if(action === 'prepare') { if(confirm("Hành động này sẽ XÓA SẠCH điểm và lịch sử làm bài của tất cả học sinh để bắt đầu đợt thi mới. Bạn có chắc chắn không?")) { try { await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'waiting' }); const q = query(collection(db, `artifacts/${appId}/quiz_results`)); const snapshot = await getDocs(q); const batch = writeBatch(db); snapshot.docs.forEach((doc) => { batch.delete(doc.ref); }); await batch.commit(); alert("Đã reset toàn bộ điểm. Sẵn sàng cho đợt thi mới!"); } catch(e) { alert("Lỗi khi reset: " + e.message); } } } else if (action === 'start') { await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'active' }); } else if (action === 'stop') { await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'finished' }); } },
 // --- TÍNH NĂNG TRÒ CHUYỆN VỚI THÚ CƯNG (AI) ---
         
-        startListening: () => {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) return alert("Trình duyệt này không hỗ trợ Micro. Hãy dùng Chrome/Edge trên Android/PC.");
-
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'vi-VN'; // Nghe tiếng Việt
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
-
-            const btn = document.getElementById('btn-mic');
-            const icon = document.getElementById('mic-icon');
-            
-            // Hiệu ứng đang nghe
-            icon.textContent = '👂';
-            btn.classList.add('bg-red-100', 'border-red-400', 'animate-pulse');
-
-            recognition.start();
-
-            recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript;
-                console.log("Bạn nói: ", text);
-                window.app.processPetResponse(text); // Gửi cho AI xử lý
-            };
-
-            recognition.onend = () => {
-                icon.textContent = '🎙️';
-                btn.classList.remove('bg-red-100', 'border-red-400', 'animate-pulse');
-            };
-
-            recognition.onerror = (event) => {
-                alert("Lỗi Micro: " + event.error);
-            };
-        },
-
-        // Hàm xử lý AI (Đã cập nhật Key và Model 1.5 Flash)
-        // --- AI CHAT (Dùng Model gemini-1.5-flash) ---
+        // --- BẮT ĐẦU CODE AI MỚI ---
         startListening: () => {
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
             if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
@@ -1304,7 +1269,6 @@
             };
             rec.onend = () => document.getElementById('btn-mic').classList.remove('bg-red-500', 'animate-pulse');
             rec.onerror = (e) => { 
-                // Không hiện alert lỗi nếu chỉ là lỗi không nghe thấy gì
                 if(e.error !== 'no-speech') console.log("Lỗi Micro:", e.error);
                 document.getElementById('btn-mic').classList.remove('bg-red-500');
             };
@@ -1318,58 +1282,27 @@
             }
         },
 
-      processPetResponse: async (text) => {
+        processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // 1. CHUẨN BỊ HỒ SƠ NHÂN VẬT (Kỹ càng hơn)
-                // Lấy tên người dùng
-                let ownerName = "Chủ nhân";
-                if (currentUser && currentUser.name) ownerName = currentUser.name;
+                // 1. Chuẩn bị hồ sơ
+                let ownerName = currentUser?.name || "Chủ nhân";
+                let petName = currentUser?.pet?.name || "Bé cưng";
+                const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
+                let petTypeVN = typeMap[currentUser?.pet?.type] || "thú cưng";
 
-                // Lấy thông tin thú cưng
-                let petName = "Thú cưng";
-                let petTypeVN = "vật nuôi";
-                
-                if (currentUser && currentUser.pet) {
-                    petName = currentUser.pet.name || "Bé cưng";
-                    const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
-                    petTypeVN = typeMap[currentUser.pet.type] || "thú cưng";
-                }
+                // 2. Lệnh nhắc (Prompt)
+                const context = `Đóng vai: ${petTypeVN} tên "${petName}". Chủ: "${ownerName}".
+                                 Yêu cầu: Nói Tiếng Việt 100%, giọng điệu trẻ con, ngắn gọn (dưới 20 từ).
+                                 Câu nói: "${text}"`;
 
-                // 2. CÂU LỆNH "NHẮC TUỒNG" CHO AI (PROMPT)
-                const context = `Bạn đang nhập vai là một chú ${petTypeVN} tên là "${petName}".
-                                 Chủ nhân của bạn tên là "${ownerName}".
-                                 
-                                 NHIỆM VỤ: Hãy trả lời câu nói của chủ nhân.
-                                 
-                                 YÊU CẦU BẮT BUỘC:
-                                 1. Ngôn ngữ: Tiếng Việt 100%.
-                                 2. Giọng điệu: Dễ thương, nũng nịu, lém lỉnh (giống trẻ con).
-                                 3. Xưng hô: Xưng "em" hoặc "bé", gọi đối phương là "chủ nhân" hoặc "anh/chị ${ownerName}".
-                                 4. Độ dài: Ngắn gọn (dưới 25 từ).
-                                 
-                                 Câu nói của chủ nhân: "${text}"`;
-
-                // 3. TỰ ĐỘNG DÒ TÌM MODEL (Giữ nguyên logic dò tìm đã chạy tốt)
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-                const listRes = await fetch(listUrl);
-                const listData = await listRes.json();
+                // 3. GỌI TRỰC TIẾP (QUAN TRỌNG: KHÔNG DÙNG listModels ĐỂ TRÁNH LỖI)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
-                // Ưu tiên Flash -> Pro -> Mọi model Gemini
-                let model = listData.models?.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models?.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models?.find(m => m.name.includes('gemini'));
-                
-                if (!model) throw new Error("Không tìm thấy Model AI nào khả dụng.");
-                
-                const modelName = model.name.replace('models/', ''); 
-
-                // 4. GỬI LỆNH
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -1378,64 +1311,50 @@
                 
                 const data = await res.json();
                 
-                if (data.error) throw new Error(data.error.message);
-                if (!data.candidates || !data.candidates[0].content) throw new Error("AI không trả lời được.");
+                // Nếu 1.5 Flash lỗi thì tự chuyển sang Pro
+                let reply = "";
+                if (data.error) {
+                    console.warn("Flash lỗi, thử Pro...", data.error);
+                    const urlPro = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+                    const resPro = await fetch(urlPro, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: context }] }] })
+                    });
+                    const dataPro = await resPro.json();
+                    if(dataPro.error) throw new Error(dataPro.error.message);
+                    reply = dataPro.candidates[0].content.parts[0].text;
+                } else {
+                    reply = data.candidates[0].content.parts[0].text;
+                }
 
-                const reply = data.candidates[0].content.parts[0].text;
-                
-                // Hiển thị & Nói
+                // 4. Hiển thị & Nói (Giọng Chị Google)
                 chatText.textContent = reply;
                 window.app.speak(reply);
+                
                 if(window.app.animatePetClick) window.app.animatePetClick();
-
-                setTimeout(() => bubble.classList.add('hidden'), 8000); // Bong bóng hiện lâu hơn chút (8s) để kịp đọc
+                setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
                 console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic... em không nghe rõ ạ 😿";
+                chatText.textContent = "Hic... mạng lag quá ạ 😿";
             }
         },
         
         speak: (text) => {
-            // Hủy câu nói cũ
-            window.speechSynthesis.cancel();
-
-            // Hàm đệ quy để thử lại nếu danh sách giọng chưa tải kịp
-            const trySpeaking = (retryCount = 0) => {
-                const voices = window.speechSynthesis.getVoices();
-                
-                // Tìm giọng Tiếng Việt (Ưu tiên Google, Microsoft, hoặc bất kỳ cái nào có 'vi', 'VN')
-                let vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google')); // Google hay nhất
-                if (!vnVoice) vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('An')); // Microsoft An
-                if (!vnVoice) vnVoice = voices.find(v => v.lang.includes('vi')); // Bất kỳ giọng Việt nào
-
-                // Nếu chưa tìm thấy giọng và chưa thử quá 5 lần -> Đợi chút rồi thử lại
-                if (!vnVoice && retryCount < 10) {
-                    setTimeout(() => trySpeaking(retryCount + 1), 100);
-                    return;
-                }
-
-                const u = new SpeechSynthesisUtterance(text);
-                u.lang = 'vi-VN';
-                
-                if (vnVoice) {
-                    u.voice = vnVoice;
-                    console.log("Đã chọn giọng:", vnVoice.name);
-                    u.pitch = 1.5; // Tăng cao độ (0-2) -> Giọng trẻ con/thú cưng
-                    u.rate = 1.1;  // Tốc độ nhanh nhẹn
-                } else {
-                    console.warn("Máy chưa cài giọng Tiếng Việt! Đang dùng giọng mặc định.");
-                    // Nếu không có giọng Việt, vẫn cố chỉnh cao độ cho đỡ ồm
-                    u.pitch = 1.4; 
-                }
-
-               window.speechSynthesis.speak(u);
-            };
-            
-            // Gọi hàm nói ngay lập tức
-            trySpeaking();
+            if (window.currentAudio) {
+                window.currentAudio.pause();
+                window.currentAudio = null;
+            }
+            // Dùng API Google Translate TTS để lấy giọng nữ Tiếng Việt chuẩn
+            // Cách này không cần cài đặt gì trên máy tính
+            const encodedText = encodeURIComponent(text);
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
+            window.currentAudio = new Audio(url);
+            window.currentAudio.play().catch(e => console.error("Lỗi Audio:", e));
         }
-    }; // Kết thúc window.app
+
+    }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
     // Khởi chạy
     init();
@@ -1516,6 +1435,7 @@
 </body>
 
 </html>
+
 
 
 
