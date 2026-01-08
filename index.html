@@ -1329,7 +1329,7 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
                 // Đảm bảo bạn đã khai báo const GEMINI_API_KEY = "..." ở đầu file script
                 if (typeof GEMINI_API_KEY === 'undefined') throw new Error("Thiếu dòng khai báo GEMINI_API_KEY ở đầu script!");
 
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
@@ -1450,6 +1450,7 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 </body>
 
 </html>
+
 
 
 
