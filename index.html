@@ -1319,7 +1319,7 @@
         },
 
       processPetResponse: async (text) => {
-            console.log("--- ĐÃ CẬP NHẬT CODE TỰ ĐỘNG TÌM MODEL ---"); // Dòng này để kiểm tra
+            console.log("--- ĐÃ CẬP NHẬT CODE AI TIẾNG VIỆT ---");
             
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
@@ -1327,62 +1327,78 @@
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // BƯỚC 1: Lấy danh sách các model mà dự án của bạn CÓ QUYỀN SỬ DỤNG
+                // Lấy thông tin hiện tại để "nhắc tuồng" cho AI
+                const myName = currentUser.name || "Chủ nhân";
+                const petType = currentUser.pet ? currentUser.pet.type : "thú cưng";
+                const petName = currentUser.pet ? currentUser.pet.name : "bé";
+                
+                // --- CÂU LỆNH NHẮC (PROMPT) QUAN TRỌNG NHẤT ---
+                // Đây là chỗ bắt nó nói Tiếng Việt và đóng vai
+                const context = `Bạn là một chú ${petType} dễ thương tên là "${petName}". 
+                                 Chủ nhân của bạn tên là "${myName}".
+                                 Hãy trả lời câu nói sau đây của chủ nhân bằng Tiếng Việt.
+                                 Giọng điệu: Vui vẻ, nũng nịu, dễ thương, dùng từ ngữ trẻ con (xưng em/bé - gọi chủ nhân/anh/chị).
+                                 Lưu ý: Chỉ trả lời ngắn gọn dưới 20 từ.`;
+                                 
+                const prompt = `${context} \n\nChủ nhân nói: "${text}"`;
+                // ---------------------------------------------------
+
                 const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
                 const listRes = await fetch(listUrl);
                 const listData = await listRes.json();
                 
-                if (listData.error) throw new Error("Lỗi lấy danh sách Model: " + listData.error.message);
+                if (listData.error) throw new Error(listData.error.message);
 
-                // BƯỚC 2: Tìm model phù hợp (Ưu tiên Flash -> Pro -> Bất kỳ cái nào là Gemini)
-                // Code sẽ tìm trong danh sách 50 cái kia để lấy ra 1 cái tên chính xác nhất
                 let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini-1.5-pro'));
                 if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini'));
                 
-                if (!model) throw new Error("Dự án này chưa kích hoạt model Gemini nào cả!");
+                if (!model) throw new Error("Không tìm thấy model phù hợp");
 
-                // Lấy tên model chuẩn (ví dụ: models/gemini-1.5-flash-001)
                 const modelName = model.name.replace('models/', ''); 
-                console.log("Đang sử dụng model:", modelName); 
-
-                // BƯỚC 3: Gọi API với tên model CHÍNH XÁC vừa tìm được
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 
                 const data = await res.json();
-                
                 if(data.error) throw new Error(data.error.message);
                 
                 const reply = data.candidates[0].content.parts[0].text;
-                chatText.textContent = reply;
                 
-                // Đọc to
-                window.speechSynthesis.cancel();
-                const u = new SpeechSynthesisUtterance(reply);
-                u.lang = 'vi-VN'; u.rate = 1.1; u.pitch = 1.2;
-                window.speechSynthesis.speak(u);
-
-                // Nhảy vui mừng
+                // Hiển thị và nói
+                chatText.textContent = reply;
+                window.app.speak(reply);
                 if(window.app.animatePetClick) window.app.animatePetClick();
 
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
             } catch(e) {
                 console.error("CHI TIẾT LỖI:", e);
-                chatText.textContent = "Lỗi: " + e.message;
+                chatText.textContent = "Hic, em chưa hiểu ý chủ nhân...";
             }
         },
         
         speak: (text) => {
+            // Ngừng câu đang nói dở (nếu có)
             window.speechSynthesis.cancel();
+
             const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'vi-VN'; u.rate = 1.1; u.pitch = 1.2;
+            
+            // 1. Cấu hình Tiếng Việt
+            u.lang = 'vi-VN'; 
+            
+            // 2. Chỉnh giọng cho giống thú cưng (Cao và nhanh hơn)
+            u.pitch = 1.6; // Cao độ (0-2). 1.6 là giọng trẻ con/thú cưng
+            u.rate = 1.1;  // Tốc độ (0.1-10). 1.1 là nói nhanh nhẹn
+
+            // 3. Cố gắng tìm giọng Google Tiếng Việt (nếu có)
+            const voices = window.speechSynthesis.getVoices();
+            const vnVoice = voices.find(v => v.lang.includes('vi'));
+            if (vnVoice) u.voice = vnVoice;
+
             window.speechSynthesis.speak(u);
         }
     }; // Kết thúc window.app
@@ -1466,6 +1482,7 @@
 </body>
 
 </html>
+
 
 
 
