@@ -1318,58 +1318,30 @@
             }
         },
 
-      processPetResponse: async (text) => {
+     processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // 1. CHUẨN BỊ HỒ SƠ NHÂN VẬT (Kỹ càng hơn)
-                // Lấy tên người dùng
-                let ownerName = "Chủ nhân";
-                if (currentUser && currentUser.name) ownerName = currentUser.name;
-
-                // Lấy thông tin thú cưng
-                let petName = "Thú cưng";
-                let petTypeVN = "vật nuôi";
+                // 1. CHUẨN BỊ HỒ SƠ (Giữ nguyên để nó thông minh)
+                let ownerName = currentUser?.name || "Chủ nhân";
+                let petName = currentUser?.pet?.name || "Bé cưng";
                 
-                if (currentUser && currentUser.pet) {
-                    petName = currentUser.pet.name || "Bé cưng";
-                    const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
-                    petTypeVN = typeMap[currentUser.pet.type] || "thú cưng";
-                }
+                // Dịch loại thú
+                const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
+                let petTypeVN = typeMap[currentUser?.pet?.type] || "thú cưng";
 
-                // 2. CÂU LỆNH "NHẮC TUỒNG" CHO AI (PROMPT)
-                const context = `Bạn đang nhập vai là một chú ${petTypeVN} tên là "${petName}".
-                                 Chủ nhân của bạn tên là "${ownerName}".
-                                 
-                                 NHIỆM VỤ: Hãy trả lời câu nói của chủ nhân.
-                                 
-                                 YÊU CẦU BẮT BUỘC:
-                                 1. Ngôn ngữ: Tiếng Việt 100%.
-                                 2. Giọng điệu: Dễ thương, nũng nịu, lém lỉnh (giống trẻ con).
-                                 3. Xưng hô: Xưng "em" hoặc "bé", gọi đối phương là "chủ nhân" hoặc "anh/chị ${ownerName}".
-                                 4. Độ dài: Ngắn gọn (dưới 25 từ).
-                                 
-                                 Câu nói của chủ nhân: "${text}"`;
+                // 2. CẤU HÌNH LỜI NHẮC (PROMPT)
+                const context = `Đóng vai: ${petTypeVN} tên "${petName}". Chủ: "${ownerName}".
+                                 Yêu cầu: Nói Tiếng Việt, giọng trẻ con, ngắn gọn (dưới 20 từ).
+                                 Câu nói: "${text}"`;
 
-                // 3. TỰ ĐỘNG DÒ TÌM MODEL (Giữ nguyên logic dò tìm đã chạy tốt)
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-                const listRes = await fetch(listUrl);
-                const listData = await listRes.json();
+                // 3. GỌI THẲNG MODEL FLASH (BỎ QUA DÒ TÌM ĐỂ TĂNG TỐC)
+                // gemini-1.5-flash là model nhanh nhất hiện nay của Google
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
                 
-                // Ưu tiên Flash -> Pro -> Mọi model Gemini
-                let model = listData.models?.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models?.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models?.find(m => m.name.includes('gemini'));
-                
-                if (!model) throw new Error("Không tìm thấy Model AI nào khả dụng.");
-                
-                const modelName = model.name.replace('models/', ''); 
-
-                // 4. GỬI LỆNH
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -1378,21 +1350,36 @@
                 
                 const data = await res.json();
                 
-                if (data.error) throw new Error(data.error.message);
-                if (!data.candidates || !data.candidates[0].content) throw new Error("AI không trả lời được.");
+                // Xử lý lỗi nếu 1.5 Flash không chạy (Fallback sang Pro)
+                if (data.error) {
+                    console.warn("Flash lỗi, thử dùng Pro...", data.error);
+                    const urlPro = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+                    const resPro = await fetch(urlPro, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: context }] }] })
+                    });
+                    const dataPro = await resPro.json();
+                    if(dataPro.error) throw new Error(dataPro.error.message);
+                    
+                    var reply = dataPro.candidates[0].content.parts[0].text;
+                } else {
+                    var reply = data.candidates[0].content.parts[0].text;
+                }
 
-                const reply = data.candidates[0].content.parts[0].text;
-                
-                // Hiển thị & Nói
+                // 4. HIỂN THỊ & NÓI NGAY
                 chatText.textContent = reply;
                 window.app.speak(reply);
+                
+                // Hiệu ứng nhảy
                 if(window.app.animatePetClick) window.app.animatePetClick();
 
-                setTimeout(() => bubble.classList.add('hidden'), 8000); // Bong bóng hiện lâu hơn chút (8s) để kịp đọc
+                // Tắt bong bóng chat nhanh hơn (5s) để cảm giác lanh lợi
+                setTimeout(() => bubble.classList.add('hidden'), 5000);
 
             } catch(e) {
-                console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic... em không nghe rõ ạ 😿";
+                console.error("Lỗi:", e);
+                chatText.textContent = "Hic... mạng lag quá ạ 😿";
             }
         },
         
@@ -1516,6 +1503,7 @@
 </body>
 
 </html>
+
 
 
 
