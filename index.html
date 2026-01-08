@@ -1429,8 +1429,12 @@
                     u.pitch = 1.4; 
                 }
 
-                window.speechSynthesis.speak(u);
-            }
+               window.speechSynthesis.speak(u);
+            };
+            
+            // Gọi hàm nói ngay lập tức
+            trySpeaking();
+        }
     }; // Kết thúc window.app
 
     // Khởi chạy
@@ -1512,6 +1516,7 @@
 </body>
 
 </html>
+
 
 
 
