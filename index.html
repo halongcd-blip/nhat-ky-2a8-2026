@@ -1289,55 +1289,49 @@
             chatText.textContent = "Đang nghĩ... 🤔";
             
             try {
-                // 1. Chuẩn bị hồ sơ
-                let ownerName = currentUser?.name || "Chủ nhân";
-                let petName = currentUser?.pet?.name || "Bé cưng";
-                const typeMap = { 'dog': 'chó con', 'cat': 'mèo con', 'bunny': 'thỏ con' };
-                let petTypeVN = typeMap[currentUser?.pet?.type] || "thú cưng";
+                // BƯỚC 1: LẤY DANH SÁCH MODEL (Cái này bạn đã test thành công!)
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+                
+                if (listData.error) throw new Error("Lỗi lấy danh sách: " + listData.error.message);
 
-                // 2. Lệnh nhắc (Prompt)
-                const context = `Đóng vai: ${petTypeVN} tên "${petName}". Chủ: "${ownerName}".
-                                 Yêu cầu: Nói Tiếng Việt 100%, giọng điệu trẻ con, ngắn gọn (dưới 20 từ).
-                                 Câu nói: "${text}"`;
+                // BƯỚC 2: TỰ ĐỘNG CHỌN MODEL TỐT NHẤT CÓ TRONG DANH SÁCH
+                // Tìm cái nào có chữ 'gemini-1.5-flash', nếu không thì lấy 'gemini-pro'
+                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini')); // Lấy bất kỳ cái nào còn lại
+                
+                if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
 
-                // 3. GỌI TRỰC TIẾP (QUAN TRỌNG: KHÔNG DÙNG listModels ĐỂ TRÁNH LỖI)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                // Lấy tên chuẩn (ví dụ: models/gemini-1.5-flash-001)
+                const modelName = model.name.replace('models/', '');
+                console.log("Đang dùng model:", modelName); // Kiểm tra ở Console xem nó chọn cái nào
+
+                // BƯỚC 3: GỬI TIN NHẮN VỚI TÊN MODEL CHUẨN VỪA TÌM ĐƯỢC
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: context }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
                 });
                 
                 const data = await res.json();
                 
-                // Nếu 1.5 Flash lỗi thì tự chuyển sang Pro
-                let reply = "";
-                if (data.error) {
-                    console.warn("Flash lỗi, thử Pro...", data.error);
-                    const urlPro = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-                    const resPro = await fetch(urlPro, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ contents: [{ parts: [{ text: context }] }] })
-                    });
-                    const dataPro = await resPro.json();
-                    if(dataPro.error) throw new Error(dataPro.error.message);
-                    reply = dataPro.candidates[0].content.parts[0].text;
-                } else {
-                    reply = data.candidates[0].content.parts[0].text;
-                }
-
-                // 4. Hiển thị & Nói (Giọng Chị Google)
-                chatText.textContent = reply;
-                window.app.speak(reply);
+                if(data.error) throw new Error(data.error.message);
                 
+                const reply = data.candidates[0].content.parts[0].text;
+                chatText.textContent = reply;
+                
+                // Đọc to & Hiệu ứng
+                window.app.speak(reply);
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
-                console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic... mạng lag quá ạ 😿";
+                console.error("Lỗi:", e);
+                chatText.textContent = "Lỗi: " + e.message;
             }
         },
         
@@ -1435,6 +1429,7 @@
 </body>
 
 </html>
+
 
 
 
