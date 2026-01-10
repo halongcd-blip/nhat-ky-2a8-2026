@@ -7,7 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <style>
 /* Hiệu ứng khung vàng lấp lánh */
 .frame-gold-sparkle {
@@ -842,18 +844,14 @@
         appId: "1:292137730998:web:229f5fce1e756f7ba37717"
     };
 
+firebase.initializeApp(firebaseConfig);
+
     let db, auth, currentUser = null;
     let currentTab = '';
     const appId = 'class-2a8-v1';
 // --- DÁN MÃ API CỦA BẠN VÀO ĐÂY ---
    // --- DÁN MÃ API CỦA BẠN VÀO ĐÂY ---
-// Cắt key ra làm 2 hoặc 3 phần
-const part1 = "AIza"; 
-const part2 = "SyDxh91nycDGgC2yh"; // Phần giữa của key
-const part3 = "U49hMrkbFn0q0VkMzs";   // Phần đuôi của key
 
-// Ghép lại khi cần dùng
-const GEMINI_API_KEY = part1 + part2 + part3;
     const USER_STORAGE_KEY = '2a8_currentUser'; 
     const APP_CONFIG_DOC = (db) => doc(db, `artifacts/${appId}/config`, 'main');
     const QUIZ_GLOBAL_DOC = (db) => doc(db, `artifacts/${appId}/quiz_state`, 'main');
@@ -913,8 +911,9 @@ const GEMINI_API_KEY = part1 + part2 + part3;
     };
 
     const applySeasonalTheme = () => { const today = new Date(); const month = today.getMonth() + 1; const day = today.getDate(); const body = document.body; let icon = ''; let color = ''; let themeClass = ''; let greeting = ''; if (month === 12 && day <= 30) { themeClass = 'theme-xmas'; icon = '❄️'; color = '#fff'; greeting = '🎄 Chúc Mừng Giáng Sinh!'; } else if ((month === 1) || (month === 2 && day <= 20)) { themeClass = 'theme-tet'; icon = '🌸'; color = '#ffb7b2'; greeting = '🧧 Chúc Mừng Năm Mới!'; } if (themeClass) { body.classList.add(themeClass); document.getElementById('seasonal-greeting').textContent = greeting; setInterval(() => { const f = document.createElement('div'); f.innerHTML = icon; f.className = 'falling-item'; f.style.left = Math.random() * 100 + 'vw'; f.style.fontSize = (Math.random() * 1.5 + 0.5) + 'rem'; f.style.color = color; f.style.animationDuration = (Math.random() * 5 + 3) + 's'; document.body.appendChild(f); setTimeout(() => f.remove(), 8000); }, 400); } };
-
+let _cachedGeminiKey = null;
     window.app = {
+
         userCache: {},
         startUserListener: () => {
             if (!auth.currentUser) return;
@@ -1289,71 +1288,158 @@ const GEMINI_API_KEY = part1 + part2 + part3;
             }
         },
 
-        processPetResponse: async (text) => {
-            const bubble = document.getElementById('pet-chat-bubble');
-            const chatText = document.getElementById('pet-chat-text');
-            bubble.classList.remove('hidden');
-            chatText.textContent = "Đang nghĩ... 🤔";
+      processPetResponse: async (text) => {
+    const bubble = document.getElementById('pet-chat-bubble');
+    const chatText = document.getElementById('pet-chat-text');
+    bubble.classList.remove('hidden');
+    chatText.textContent = "Đợi em nghĩ một chút nhé... 🤔";
+    
+    // =======================================================
+    // BƯỚC 1: ĐẢM BẢO NGƯỜI DÙNG CÓ TOKEN MỚI NHẤT
+    // =======================================================
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        // Mặc dù UI đã ẩn, nhưng nếu có lỗi Auth bất ngờ, vẫn xử lý
+        chatText.textContent = "Em chưa nghe rõ, chủ nhân nói lại đi ạ.";
+        setTimeout(() => bubble.classList.add('hidden'), 4000);
+        return; 
+    }
+    
+    try {
+        // CÁCH KHẮC PHỤC LỖI QUYỀN: BẮT FIREBASE LÀM MỚI TOKEN NGAY LẬP TỨC
+        // Nếu không có dòng này, Token cũ sẽ bị gửi lên và bị Rules từ chối.
+        await user.getIdToken(true); 
+
+    } catch (tokenError) {
+        chatText.textContent = "Lỗi xác thực token: Vui lòng đăng xuất và đăng nhập lại.";
+        console.error("Token Refresh Error:", tokenError);
+        setTimeout(() => bubble.classList.add('hidden'), 5000);
+        return;
+    }
+
+    // =======================================================
+    // BƯỚC 2: LẤY API Key từ Firestore (Sau khi có Token mới)
+    // =======================================================
+    let GEMINI_API_KEY = null;
+    if (!_cachedGeminiKey) {
+        try {
+            // SỬ DỤNG firebase.firestore() TRỰC TIẾP
+            const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
+            // ... (Logic kiểm tra và gán _cachedGeminiKey giữ nguyên)
             
-            try {
-                // BƯỚC 1: LẤY DANH SÁCH MODEL (Cái này bạn đã test thành công!)
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-                const listRes = await fetch(listUrl);
-                const listData = await listRes.json();
+            if (keySnap.exists) {
+                _cachedGeminiKey = keySnap.data().gemini; 
                 
-                if (listData.error) throw new Error("Lỗi lấy danh sách: " + listData.error.message);
-
-                // BƯỚC 2: TỰ ĐỘNG CHỌN MODEL TỐT NHẤT CÓ TRONG DANH SÁCH
-                // Tìm cái nào có chữ 'gemini-1.5-flash', nếu không thì lấy 'gemini-pro'
-                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini')); // Lấy bất kỳ cái nào còn lại
-                
-                if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
-
-                // Lấy tên chuẩn (ví dụ: models/gemini-1.5-flash-001)
-                const modelName = model.name.replace('models/', '');
-                console.log("Đang dùng model:", modelName); // Kiểm tra ở Console xem nó chọn cái nào
-
-                // BƯỚC 3: GỬI TIN NHẮN VỚI TÊN MODEL CHUẨN VỪA TÌM ĐƯỢC
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-                
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "Đóng vai thú cưng (xưng hô tớ-cậu) trả lời ngắn gọn (dưới 20 từ), dễ thương cho trẻ lớp 2: " + text }] }] })
-                });
-                
-                const data = await res.json();
-                
-                if(data.error) throw new Error(data.error.message);
-                
-                const reply = data.candidates[0].content.parts[0].text;
-                chatText.textContent = reply;
-                
-                // Đọc to & Hiệu ứng
-                window.app.speak(reply);
-                if(window.app.animatePetClick) window.app.animatePetClick();
-                setTimeout(() => bubble.classList.add('hidden'), 6000);
-
-            } catch(e) {
-                console.error("Lỗi:", e);
-                chatText.textContent = "Lỗi: " + e.message;
+                if (!_cachedGeminiKey) {
+                    throw new Error("Lỗi: Document 'system_config' đã có nhưng không tìm thấy trường 'gemini' chứa Key.");
+                }
+            } else {
+                throw new Error("Không tìm thấy Document 'system_config' trong Collection 'artifacts'.");
             }
-        },
+
+        } catch(e) {
+            // Hiển thị lỗi cuối cùng (chủ yếu là Rules nếu code này vẫn lỗi)
+            chatText.textContent = "Lỗi bảo mật: Kiểm tra lại Firebase Rules (artifacts/system_config).";
+            console.error("Lỗi lấy Key:", e);
+            setTimeout(() => bubble.classList.add('hidden'), 6000);
+            return;
+        }
+    }
+    GEMINI_API_KEY = _cachedGeminiKey;
+
+    try {
+        // BƯỚC 1 & 2: GIỮ NGUYÊN LOGIC CŨ CỦA BẠN (Lấy danh sách và chọn model tốt nhất)
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+        const listRes = await fetch(listUrl);
+        const listData = await listRes.json();
+        
+        if (listData.error) throw new Error("Lỗi lấy danh sách: " + listData.error.message);
+
+        let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+        if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+        if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+        
+        if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
+
+        const modelName = model.name.replace('models/', '');
+        
+        // BƯỚC 3: GỬI TIN NHẮN
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ 
+                // Tối ưu hóa lại Prompt:
+                text: `Bạn là một chú ${currentUser?.pet?.type || 'thú cưng'} đáng yêu tên là "${currentUser?.pet?.name || 'Bé cưng'}". 
+                                Chủ nhân của bạn là "${currentUser?.name || 'bạn nhỏ'}". 
+                                Nhiệm vụ:
+                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
+                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và khen ngợi chủ nhân.
+                                4. Trả lời cực kỳ ngắn gọn, thi thoảng dùng icon dễ thương. Câu hỏi: ${text}`
+                            }]
+                        }]
+                    })
+                });
+        
+        const data = await res.json();
+        
+        if(data.error) throw new Error(data.error.message);
+        
+        const reply = data.candidates[0].content.parts[0].text;
+        chatText.textContent = reply;
+        
+        // Đọc to & Hiệu ứng
+        window.app.speak(reply);
+        if(window.app.animatePetClick) window.app.animatePetClick();
+        setTimeout(() => bubble.classList.add('hidden'), 6000);
+
+    } catch(e) {
+        console.error("Lỗi:", e);
+        chatText.textContent = "Lỗi: " + e.message;
+        setTimeout(() => bubble.classList.add('hidden'), 6000);
+    }
+}, // Dấu phẩy này là bắt buộc vì hàm speak theo sau
         
         speak: (text) => {
-            if (window.currentAudio) {
-                window.currentAudio.pause();
-                window.currentAudio = null;
-            }
-            // Dùng API Google Translate TTS để lấy giọng nữ Tiếng Việt chuẩn
-            // Cách này không cần cài đặt gì trên máy tính
-            const encodedText = encodeURIComponent(text);
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
-            window.currentAudio = new Audio(url);
-            window.currentAudio.play().catch(e => console.error("Lỗi Audio:", e));
+    if (!window.speechSynthesis) return;
+    
+    // Ngắt lời cũ nếu đang nói
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'vi-VN'; // Ngôn ngữ Tiếng Việt
+    
+    // THỦ THUẬT GIỌNG TRẺ CON VÀ TỐI ƯU TẢI GIỌNG NÓI
+    utterance.pitch = 1.6; // Tăng độ cao âm thanh (Giọng trẻ con)
+    utterance.rate = 1.1;  // Nói nhanh hơn một chút
+    utterance.volume = 1;
+
+    // Logic quan trọng: Đợi Voices (Giọng nói) tải xong
+    const setVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        // Cố gắng tìm giọng Tiếng Việt
+        const vnVoice = voices.find(v => v.lang.includes('vi'));
+        
+        if (vnVoice) {
+            utterance.voice = vnVoice;
+        } else {
+            // Nếu không tìm thấy Tiếng Việt, dùng giọng mặc định của trình duyệt
+            console.warn("Không tìm thấy giọng Tiếng Việt. Sử dụng giọng mặc định.");
         }
+        
+        // Bắt đầu nói
+        window.speechSynthesis.speak(utterance);
+    };
+
+    // Kiểm tra nếu danh sách giọng nói đã tải, thì gọi ngay
+    if (window.speechSynthesis.getVoices().length) {
+        setVoice();
+    } else {
+        // Nếu chưa tải, chờ sự kiện onvoiceschanged (chỉ chạy 1 lần)
+        window.speechSynthesis.onvoiceschanged = setVoice;
+    }
+}, // <-- Đảm bảo có dấu phẩy ở cuối nếu có hàm khác sau đó
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
@@ -1436,6 +1522,7 @@ const GEMINI_API_KEY = part1 + part2 + part3;
 </body>
 
 </html>
+
 
 
 
