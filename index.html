@@ -1284,6 +1284,8 @@ let _cachedGeminiKey = null;
                 const t = e.results[0][0].transcript; 
                 document.getElementById('pet-input-text').value = t; 
                 window.app.processPetResponse(t); 
+// ✅ DÒNG CODE BẠN CẦN THÊM ĐỂ XÓA NỘI DUNG SAU KHI GỬI:
+                document.getElementById('pet-input-text').value = '';
             };
             rec.onend = () => document.getElementById('btn-mic').classList.remove('bg-red-500', 'animate-pulse');
             rec.onerror = (e) => { 
