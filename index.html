@@ -565,7 +565,6 @@
                             <button onclick="window.app.sendPetText()" class="bg-blue-500 text-white p-2 rounded-full shadow border-2 border-white hover:bg-blue-600 transition">
                                 <i data-lucide="send" width="20"></i>
                             </button>
-<div id="mic-status-message" class="hidden text-center text-sm font-bold text-red-500 mb-1">bạn nói đi...</div>
                             <button onclick="window.app.startListening()" id="btn-mic" class="bg-purple-500 text-white p-2 rounded-full shadow border-2 border-white hover:bg-purple-600 transition animate-pulse">
                                 <i data-lucide="mic" width="20"></i>
                             </button>
@@ -1265,27 +1264,14 @@ let _cachedGeminiKey = null;
         startListening: () => {
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
             if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
-// ✅ DÒNG 1: ĐỊNH NGHĨA PHẦN TỬ THÔNG BÁO MỚI
-            const micStatus = document.getElementById('mic-status-message');
-            
-            // ✅ DÒNG 2: HIỂN THỊ thông báo (Xóa class 'hidden')
-            micStatus.classList.remove('hidden');
-
-            // ✅ DÒNG 3 & 4: TỰ ĐỘNG ẨN SAU 4 GIÂY (CHÍNH XÁC THEO YÊU CẦU)
-            setTimeout(() => {
-                micStatus.classList.add('hidden');
-            }, 4000);
             const rec = new Speech();
             rec.lang = 'vi-VN';
             document.getElementById('btn-mic').classList.add('bg-red-500', 'animate-pulse');
-
             rec.start();
             rec.onresult = (e) => { 
                 const t = e.results[0][0].transcript; 
                 document.getElementById('pet-input-text').value = t; 
                 window.app.processPetResponse(t); 
-// ✅ DÒNG CODE BẠN CẦN THÊM ĐỂ XÓA NỘI DUNG SAU KHI GỬI:
-                document.getElementById('pet-input-text').value = '';
             };
             rec.onend = () => document.getElementById('btn-mic').classList.remove('bg-red-500', 'animate-pulse');
             rec.onerror = (e) => { 
@@ -1536,7 +1522,6 @@ let _cachedGeminiKey = null;
 </body>
 
 </html>
-
 
 
 
