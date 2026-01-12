@@ -1400,36 +1400,42 @@ let _cachedGeminiKey = null;
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             
-            // Hiệu ứng icon vui nhộn
+            // Hiệu ứng đang nghĩ
             const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow...", "❤️"];
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // --- PHẦN QUAN TRỌNG: GIỮ NGUYÊN CÁCH LẤY KEY TỪ FIRESTORE CỦA BẠN ---
+            // -----------------------------------------------------------
+            // PHẦN 1: LẤY KEY TỪ FIREBASE (GIỮ NGUYÊN CODE CŨ CỦA BẠN)
+            // -----------------------------------------------------------
+            // Kiểm tra nếu chưa có Key thì mới đi lấy
             if (!_cachedGeminiKey) {
                 try {
-                    // Lấy Key từ artifacts/system_config (Code cũ của bạn)
-                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get();
+                    // Gọi Firestore y hệt như file bạn gửi
+                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
+                    
                     if (keySnap.exists && keySnap.data().gemini) {
-                        _cachedGeminiKey = keySnap.data().gemini;
+                        _cachedGeminiKey = keySnap.data().gemini; // Lưu vào biến tạm để dùng lần sau
                     } else {
-                        console.error("Chưa cấu hình Key trong hệ thống (artifacts/system_config).");
-                        chatText.textContent = "Lỗi: Chưa có Key AI.";
+                        console.error("Lỗi: Không tìm thấy Key trong artifacts/system_config");
+                        chatText.textContent = "Lỗi cấu hình hệ thống (Thiếu Key).";
                         return;
                     }
-                } catch (e) {
-                    console.error("Lỗi lấy Key:", e);
-                    chatText.textContent = "Lỗi kết nối hệ thống.";
+                } catch(e) {
+                    console.error("Lỗi lấy Key từ Firestore:", e);
+                    chatText.textContent = "Lỗi kết nối máy chủ.";
                     return;
                 }
             }
 
-            // --- PHẦN TỐI ƯU TỐC ĐỘ: GỌI THẲNG MODEL (KHÔNG HỎI DANH SÁCH NỮA) ---
+            // -----------------------------------------------------------
+            // PHẦN 2: GỌI AI TỐC ĐỘ CAO (ĐÃ BỎ QUA CÁC BƯỚC THỪA)
+            // -----------------------------------------------------------
             try {
                 // Tạo câu nhắc (Prompt)
                 const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
 
-                // 1. Thử gọi model nhanh nhất (Flash)
+                // GỌI THẲNG MODEL FLASH (Nhanh nhất, không cần dò tìm danh sách)
                 let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
                 
                 let res = await fetch(url, {
@@ -1438,9 +1444,9 @@ let _cachedGeminiKey = null;
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
 
-                // 2. Nếu Flash lỗi (404), tự động chuyển sang Pro (Dự phòng)
+                // Nếu Flash bị lỗi (404), tự động thử sang Pro (Dự phòng)
                 if (!res.ok) {
-                    console.log("Flash lỗi, thử sang Pro...");
+                    console.warn("Flash lỗi, thử sang Pro...");
                     url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${_cachedGeminiKey}`;
                     res = await fetch(url, {
                         method: 'POST',
@@ -1452,12 +1458,14 @@ let _cachedGeminiKey = null;
                 if (!res.ok) throw new Error("Mất kết nối với thú cưng");
 
                 const data = await res.json();
+                // Lấy nội dung trả lời an toàn
                 const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
                 
                 // Hiển thị kết quả
                 chatText.textContent = reply;
                 window.app.speak(reply);
                 
+                // Hiệu ứng nhảy
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
 
