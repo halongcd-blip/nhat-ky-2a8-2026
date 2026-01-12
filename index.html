@@ -895,6 +895,10 @@ firebase.initializeApp(firebaseConfig);
     const init = async () => {
         lucide.createIcons();
         applySeasonalTheme();
+// --- THÊM DÒNG NÀY ĐỂ TỰ ĐỘNG KIỂM TRA MỖI 1 PHÚT ---
+        setInterval(() => {
+            if(currentUser && currentUser.pet) window.app.checkPetStatus();
+        }, 60000);
         if (!firebaseConfig.apiKey) { document.getElementById('config-warning').classList.remove('hidden'); return; }
         try {
             const appInstance = initializeApp(firebaseConfig);
@@ -1142,57 +1146,57 @@ let _cachedGeminiKey = null;
         selectPetType: (type) => { selectedTempPet = type; document.querySelectorAll('.pet-select-card').forEach(el => el.classList.remove('selected')); document.getElementById(`sel-${type}`).classList.add('selected'); },
         confirmPetSelection: async () => { const petName = document.getElementById('pet-name-input').value.trim(); const prices = { 'dog': 100, 'cat': 150, 'bunny': 200 }; if (!selectedTempPet) return alert("Vui lòng chọn 1 con vật!"); if (!petName) return alert("Đặt tên cho bé nhé!"); if (currentUser.coins < prices[selectedTempPet]) return alert(`Bạn cần ${prices[selectedTempPet]} Xu để nhận nuôi bé này!`); if(confirm(`Bạn có chắc muốn nhận nuôi với giá ${prices[selectedTempPet]} Xu?`)) { try { const petData = { type: selectedTempPet, name: petName, level: 1, exp: 0, hunger: 100, fun: 100, hygiene: 100, lastInteraction: Date.now(), accessory: null }; await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: petData, coins: increment(-prices[selectedTempPet]) }); alert("Chúc mừng bạn đã nhận nuôi thú cưng!"); window.app.renderPetGame(); } catch(e) { alert("Lỗi: " + e.message); } } },
         checkPetStatus: async () => {
-            if(!currentUser.pet) { window.app.renderPetGame(); return; }
+            if(!currentUser || !currentUser.pet) { window.app.renderPetGame(); return; }
             const p = currentUser.pet;
-
-            // Kiểm tra và sửa lỗi nếu chỉ số bị NaN (Lỗi dữ liệu cũ)
-            if (isNaN(p.hunger)) p.hunger = 100;
-            if (isNaN(p.fun)) p.fun = 100;
-            if (isNaN(p.hygiene)) p.hygiene = 100;
-
             if(p.isDead) { window.app.renderPetGame(); return; }
 
             const now = Date.now();
-            // Nếu chưa có mốc thời gian, đặt mốc là hiện tại
-            if (!p.lastInteraction) p.lastInteraction = now;
+            
+            // --- SỬA LỖI QUAN TRỌNG: LƯU MỐC THỜI GIAN NGAY LẬP TỨC ---
+            if (!p.lastInteraction) {
+                console.log("Khởi tạo mốc thời gian cho thú cưng...");
+                try {
+                    await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                        "pet.lastInteraction": now 
+                    });
+                    currentUser.pet.lastInteraction = now; // Cập nhật luôn biến local
+                } catch(e) { console.error("Lỗi init time:", e); }
+                return; // Đợi vòng kiểm tra sau
+            }
 
-            // Tính số PHÚT đã trôi qua (Thay vì tính giờ như cũ)
-            const minutesPassed = (now - p.lastInteraction) / (1000 * 60);
+            // Tính số phút đã trôi qua
+            const minutesPassed = (now - p.lastInteraction) / 60000; // 60000ms = 1 phút
+            const DECAY_TIME = 10; // Cấu hình: 10 phút giảm 1 lần
 
-            // CẤU HÌNH: Cứ mỗi 10 phút sẽ giảm 1 điểm (Bạn có thể sửa số 10 thành số khác)
-            const DECAY_TIME = 10; 
-
-            // Chỉ cập nhật nếu đã trôi qua đủ thời gian cấu hình
             if (minutesPassed >= DECAY_TIME) {
-                const reduction = Math.floor(minutesPassed / DECAY_TIME); 
-
-                if(reduction > 0) {
-                    let newHunger = Math.max(0, p.hunger - reduction);
-                    let newFun = Math.max(0, p.fun - reduction);
-                    let newHygiene = Math.max(0, p.hygiene - reduction);
-                    
-                    let isDead = false;
-                    // Nếu đói quá lâu (về 0) thì sẽ chết
-                    if(newHunger <= 0) isDead = true; 
+                // Tính số điểm cần trừ (Làm tròn xuống)
+                const reduction = Math.floor(minutesPassed / DECAY_TIME);
+                
+                if (reduction > 0) {
+                    let newHunger = Math.max(0, (p.hunger || 100) - reduction);
+                    let newFun = Math.max(0, (p.fun || 100) - reduction);
+                    let newHygiene = Math.max(0, (p.hygiene || 100) - reduction);
+                    let isDead = newHunger <= 0;
 
                     try {
-                        // Cập nhật vào Firebase
                         await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
                             "pet.hunger": newHunger, 
                             "pet.fun": newFun, 
                             "pet.hygiene": newHygiene, 
-                            "pet.isDead": isDead, 
+                            "pet.isDead": isDead,
                             "pet.lastInteraction": now // Reset mốc thời gian về hiện tại
                         });
-
-                        // Cập nhật ngay vào biến cục bộ để hiển thị luôn không cần reload
+                        
+                        // Cập nhật local để hiển thị ngay
                         currentUser.pet.hunger = newHunger;
                         currentUser.pet.fun = newFun;
                         currentUser.pet.hygiene = newHygiene;
                         currentUser.pet.isDead = isDead;
                         currentUser.pet.lastInteraction = now;
+                        
+                        console.log(`Đã giảm ${reduction} điểm sau ${Math.floor(minutesPassed)} phút.`);
                     } catch(e) {
-                        console.error("Lỗi cập nhật thú cưng:", e);
+                        console.error("Lỗi cập nhật chỉ số:", e);
                     }
                 }
             }
@@ -1256,7 +1260,54 @@ let _cachedGeminiKey = null;
         stopPetWandering: () => { if(window.app.petWanderTimeout) { clearTimeout(window.app.petWanderTimeout); window.app.petWanderTimeout = null; } },
         animatePetClick: () => { const petEl = document.getElementById('pet-display'); if (!petEl) return; petEl.classList.add('pet-zoom-wobble'); setTimeout(() => { petEl.classList.remove('pet-zoom-wobble'); }, 4000); },
         toggleFoodMenu: () => { document.getElementById('pet-food-menu').classList.toggle('hidden'); },
-        buyPetItem: async (price, type, val) => { const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); currentUser.coins -= price; document.getElementById('current-coins').textContent = currentUser.coins; } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
+        buyPetItem: async (price, type, val) => { 
+            const currentMoney = window.app.userCache[currentUser.id].coins || 0; 
+            if(currentMoney < price) return alert(`Bạn không đủ xu!`); 
+            
+            const p = currentUser.pet; 
+            const currentStat = parseInt(p[type] || 0); 
+            if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); 
+            
+            try { 
+                let newVal = Math.min(100, currentStat + val); 
+                let newExp = (p.exp || 0) + 5; 
+                let newLevel = p.level; 
+                
+                if(newExp >= 100) { 
+                    newExp = 0; 
+                    newLevel++; 
+                    alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); 
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); 
+                } 
+
+                await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                    coins: increment(-price), 
+                    [`pet.${type}`]: newVal, 
+                    "pet.exp": newExp, 
+                    "pet.level": newLevel, 
+                    "pet.lastInteraction": Date.now() // <--- SỬA LẠI TÊN BIẾN NÀY CHO KHỚP
+                }); 
+                
+                document.getElementById('pet-food-menu').classList.add('hidden'); 
+                const petEl = document.getElementById('pet-display'); 
+                petEl.classList.add('pet-eating'); 
+                setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); 
+                
+                // Cập nhật local ngay lập tức
+                currentUser.coins -= price; 
+                currentUser.pet[type] = newVal;
+                currentUser.pet.exp = newExp;
+                currentUser.pet.level = newLevel;
+                currentUser.pet.lastInteraction = Date.now();
+                
+                document.getElementById('current-coins').textContent = currentUser.coins; 
+                window.app.renderPetGame();
+
+            } catch(e) { 
+                console.error(e); 
+                alert("Lỗi: " + e.message); 
+            } 
+        },
         playPet: () => { window.app.buyPetItem(0, 'fun', 10); window.app.animatePetClick(); },
         cleanPet: () => { window.app.buyPetItem(0, 'hygiene', 20); },
         revivePet: async () => { if(currentUser.coins < 300) return alert("Cần 300 xu để hồi sinh!"); if(confirm("Dùng 300 xu để hồi sinh?")) { try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-300), "pet.isDead": false, "pet.hunger": 50, "pet.fun": 50, "pet.hygiene": 50 }); alert("Thú cưng đã sống lại!"); window.app.renderPetGame(); } catch(e) { alert(e.message); } } },
