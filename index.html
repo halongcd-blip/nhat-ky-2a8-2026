@@ -895,10 +895,6 @@ firebase.initializeApp(firebaseConfig);
     const init = async () => {
         lucide.createIcons();
         applySeasonalTheme();
-// --- THÊM DÒNG NÀY ĐỂ TỰ ĐỘNG KIỂM TRA MỖI 1 PHÚT ---
-        setInterval(() => {
-            if(currentUser && currentUser.pet) window.app.checkPetStatus();
-        }, 60000);
         if (!firebaseConfig.apiKey) { document.getElementById('config-warning').classList.remove('hidden'); return; }
         try {
             const appInstance = initializeApp(firebaseConfig);
@@ -1145,63 +1141,7 @@ let _cachedGeminiKey = null;
         
         selectPetType: (type) => { selectedTempPet = type; document.querySelectorAll('.pet-select-card').forEach(el => el.classList.remove('selected')); document.getElementById(`sel-${type}`).classList.add('selected'); },
         confirmPetSelection: async () => { const petName = document.getElementById('pet-name-input').value.trim(); const prices = { 'dog': 100, 'cat': 150, 'bunny': 200 }; if (!selectedTempPet) return alert("Vui lòng chọn 1 con vật!"); if (!petName) return alert("Đặt tên cho bé nhé!"); if (currentUser.coins < prices[selectedTempPet]) return alert(`Bạn cần ${prices[selectedTempPet]} Xu để nhận nuôi bé này!`); if(confirm(`Bạn có chắc muốn nhận nuôi với giá ${prices[selectedTempPet]} Xu?`)) { try { const petData = { type: selectedTempPet, name: petName, level: 1, exp: 0, hunger: 100, fun: 100, hygiene: 100, lastInteraction: Date.now(), accessory: null }; await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: petData, coins: increment(-prices[selectedTempPet]) }); alert("Chúc mừng bạn đã nhận nuôi thú cưng!"); window.app.renderPetGame(); } catch(e) { alert("Lỗi: " + e.message); } } },
-        checkPetStatus: async () => {
-            if(!currentUser || !currentUser.pet) { window.app.renderPetGame(); return; }
-            const p = currentUser.pet;
-            if(p.isDead) { window.app.renderPetGame(); return; }
-
-            const now = Date.now();
-            
-            // --- SỬA LỖI QUAN TRỌNG: LƯU MỐC THỜI GIAN NGAY LẬP TỨC ---
-            if (!p.lastInteraction) {
-                console.log("Khởi tạo mốc thời gian cho thú cưng...");
-                try {
-                    await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
-                        "pet.lastInteraction": now 
-                    });
-                    currentUser.pet.lastInteraction = now; // Cập nhật luôn biến local
-                } catch(e) { console.error("Lỗi init time:", e); }
-                return; // Đợi vòng kiểm tra sau
-            }
-
-            // Tính số phút đã trôi qua
-            const minutesPassed = (now - p.lastInteraction) / 60000; // 60000ms = 1 phút
-            const DECAY_TIME = 10; // Cấu hình: 10 phút giảm 1 lần
-
-            if (minutesPassed >= DECAY_TIME) {
-                // Tính số điểm cần trừ (Làm tròn xuống)
-                const reduction = Math.floor(minutesPassed / DECAY_TIME);
-                
-                if (reduction > 0) {
-                    let newHunger = Math.max(0, (p.hunger || 100) - reduction);
-                    let newFun = Math.max(0, (p.fun || 100) - reduction);
-                    let newHygiene = Math.max(0, (p.hygiene || 100) - reduction);
-                    let isDead = newHunger <= 0;
-
-                    try {
-                        await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
-                            "pet.hunger": newHunger, 
-                            "pet.fun": newFun, 
-                            "pet.hygiene": newHygiene, 
-                            "pet.isDead": isDead,
-                            "pet.lastInteraction": now // Reset mốc thời gian về hiện tại
-                        });
-                        
-                        // Cập nhật local để hiển thị ngay
-                        currentUser.pet.hunger = newHunger;
-                        currentUser.pet.fun = newFun;
-                        currentUser.pet.hygiene = newHygiene;
-                        currentUser.pet.isDead = isDead;
-                        currentUser.pet.lastInteraction = now;
-                        
-                        console.log(`Đã giảm ${reduction} điểm sau ${Math.floor(minutesPassed)} phút.`);
-                    } catch(e) {
-                        console.error("Lỗi cập nhật chỉ số:", e);
-                    }
-                }
-            }
-            window.app.renderPetGame();
-        },
+        checkPetStatus: async () => { if(!currentUser.pet) { window.app.renderPetGame(); return; } const p = currentUser.pet; if (isNaN(p.hunger)) p.hunger = 100; if (isNaN(p.fun)) p.fun = 100; if (isNaN(p.hygiene)) p.hygiene = 100; if(p.isDead) { window.app.renderPetGame(); return; } const now = Date.now(); if (!p.lastInteraction) p.lastInteraction = now; const hoursPassed = (now - p.lastInteraction) / (1000 * 60 * 60); if (hoursPassed >= 1) { const reduction = Math.floor(hoursPassed / 24 * 20); if(reduction > 0) { let newHunger = Math.max(0, p.hunger - reduction); let newFun = Math.max(0, p.fun - reduction); let newHygiene = Math.max(0, p.hygiene - reduction); let isDead = false; if(newHunger <= 0) { const daysStarving = hoursPassed / 24; if (daysStarving >= 5) isDead = true; } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { "pet.hunger": newHunger, "pet.fun": newFun, "pet.hygiene": newHygiene, "pet.isDead": isDead, "pet.lastInteraction": now }); } } window.app.renderPetGame(); },
         renderPetGame: () => { const p = currentUser.pet; const setup = document.getElementById('pet-select-screen'); const main = document.getElementById('pet-main-screen'); if(!p) { setup.classList.remove('hidden'); main.classList.add('hidden'); return; } setup.classList.add('hidden'); main.classList.remove('hidden'); const images = { cat: 'https://i.pinimg.com/originals/9e/6d/c0/9e6dc0a2a7f7924dd040854a7fbcb988.gif', dog: 'https://i.pinimg.com/originals/1a/ad/ea/1aadea234ad1b805c2d39cd892abdfad.gif', bunny: 'https://i.pinimg.com/originals/3a/0e/11/3a0e1105df06e7a3a24d0229920fb1d3.gif' }; const bg = document.getElementById('pet-stage-bg'); if (p.type && images[p.type]) { const bgs = { cat: 'url("https://png.pngtree.com/thumb_back/fh260/background/20211114/pngtree-bright-orange-living-room-illustration-image_916011.png")', dog: 'url("https://img.freepik.com/vector-cao-cap/minh-hoa-vector-ve-noi-that-phong-khach-tuyet-dep-canh-hoat-hinh-ve-phong-khach-voi-cua-so-ghe-sofa-goi-tua-hinh-anh-ban-tron-binh-hoa-va-cau-thang-len-tang-hai_812561-961.jpg")', bunny: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtree-cartoon-forest-environment-illstration-image_1401354.jpg")' }; bg.style.backgroundImage = bgs[p.type]; const petEl = document.getElementById('pet-display'); const currentUrl = petEl.style.backgroundImage; const newUrl = `url("${images[p.type]}")`; if(currentUrl !== newUrl && currentUrl !== newUrl.replace(/"/g, "'")) { petEl.style.backgroundImage = newUrl; } } const petEl = document.getElementById('pet-display'); if(p.isDead) { document.getElementById('pet-dead-overlay').classList.remove('hidden'); petEl.classList.add('pet-dead'); window.app.stopPetWandering(); } else { document.getElementById('pet-dead-overlay').classList.add('hidden'); petEl.classList.remove('pet-dead'); window.app.startPetWandering(); } document.getElementById('pet-name-display').textContent = p.name; document.getElementById('pet-level').textContent = p.level || 1; document.getElementById('pet-exp').textContent = `${Math.floor(p.exp||0)}/100`; const setBar = (id, v) => { const val = Math.max(0, Math.min(100, v || 0)); document.getElementById('bar-'+id).style.width = `${val}%`; document.getElementById('val-'+id).textContent = `${Math.floor(val)}%`; }; setBar('hunger', p.hunger); setBar('fun', p.fun); setBar('hygiene', p.hygiene); window.app.renderPetWaste(p.hygiene || 0); },
         renderPetWaste: (hygiene) => { const container = document.getElementById('pet-waste-container'); if (!container) return; container.innerHTML = ''; const h = Number(hygiene) || 0; const wasteCount = Math.floor((100 - h) / 10); for (let i = 0; i < wasteCount; i++) { const poop = document.createElement('span'); poop.innerHTML = '💩'; poop.className = 'absolute text-3xl drop-shadow-md animate-bounce'; const fixedX = 15 + ((i * 15) % 70); const fixedY = 75 + ((i % 2) * 5); poop.style.left = fixedX + '%'; poop.style.top = fixedY + '%'; poop.style.zIndex = "30"; poop.style.position = "absolute"; container.appendChild(poop); } },
         startPetWandering: () => { 
@@ -1260,54 +1200,7 @@ let _cachedGeminiKey = null;
         stopPetWandering: () => { if(window.app.petWanderTimeout) { clearTimeout(window.app.petWanderTimeout); window.app.petWanderTimeout = null; } },
         animatePetClick: () => { const petEl = document.getElementById('pet-display'); if (!petEl) return; petEl.classList.add('pet-zoom-wobble'); setTimeout(() => { petEl.classList.remove('pet-zoom-wobble'); }, 4000); },
         toggleFoodMenu: () => { document.getElementById('pet-food-menu').classList.toggle('hidden'); },
-        buyPetItem: async (price, type, val) => { 
-            const currentMoney = window.app.userCache[currentUser.id].coins || 0; 
-            if(currentMoney < price) return alert(`Bạn không đủ xu!`); 
-            
-            const p = currentUser.pet; 
-            const currentStat = parseInt(p[type] || 0); 
-            if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); 
-            
-            try { 
-                let newVal = Math.min(100, currentStat + val); 
-                let newExp = (p.exp || 0) + 5; 
-                let newLevel = p.level; 
-                
-                if(newExp >= 100) { 
-                    newExp = 0; 
-                    newLevel++; 
-                    alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); 
-                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); 
-                } 
-
-                await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
-                    coins: increment(-price), 
-                    [`pet.${type}`]: newVal, 
-                    "pet.exp": newExp, 
-                    "pet.level": newLevel, 
-                    "pet.lastInteraction": Date.now() // <--- SỬA LẠI TÊN BIẾN NÀY CHO KHỚP
-                }); 
-                
-                document.getElementById('pet-food-menu').classList.add('hidden'); 
-                const petEl = document.getElementById('pet-display'); 
-                petEl.classList.add('pet-eating'); 
-                setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); 
-                
-                // Cập nhật local ngay lập tức
-                currentUser.coins -= price; 
-                currentUser.pet[type] = newVal;
-                currentUser.pet.exp = newExp;
-                currentUser.pet.level = newLevel;
-                currentUser.pet.lastInteraction = Date.now();
-                
-                document.getElementById('current-coins').textContent = currentUser.coins; 
-                window.app.renderPetGame();
-
-            } catch(e) { 
-                console.error(e); 
-                alert("Lỗi: " + e.message); 
-            } 
-        },
+        buyPetItem: async (price, type, val) => { const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); currentUser.coins -= price; document.getElementById('current-coins').textContent = currentUser.coins; } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
         playPet: () => { window.app.buyPetItem(0, 'fun', 10); window.app.animatePetClick(); },
         cleanPet: () => { window.app.buyPetItem(0, 'hygiene', 20); },
         revivePet: async () => { if(currentUser.coins < 300) return alert("Cần 300 xu để hồi sinh!"); if(confirm("Dùng 300 xu để hồi sinh?")) { try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-300), "pet.isDead": false, "pet.hunger": 50, "pet.fun": 50, "pet.hygiene": 50 }); alert("Thú cưng đã sống lại!"); window.app.renderPetGame(); } catch(e) { alert(e.message); } } },
@@ -1483,8 +1376,7 @@ let _cachedGeminiKey = null;
                                 Nhiệm vụ:
                                 1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
                                 2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và khen ngợi chủ nhân.
-                                4.TUYỆT ĐỐI KHÔNG ĐỌC ICON, EMOJI HAY KÝ TỰ ĐẶC BIỆT. CHỈ DÙNG LỜI NÓI CÓ TRONG VĂN BẢN TRẢ LỜI.
-                                5. Trả lời cực kỳ ngắn gọn. Câu hỏi: ${text}`
+                                4. Trả lời cực kỳ ngắn gọn, không được dùng icon. Câu hỏi: ${text}`
                             }]
                         }]
                     })
@@ -1630,6 +1522,7 @@ let _cachedGeminiKey = null;
 </body>
 
 </html>
+
 
 
 
