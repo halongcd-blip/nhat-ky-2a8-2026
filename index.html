@@ -1141,7 +1141,63 @@ let _cachedGeminiKey = null;
         
         selectPetType: (type) => { selectedTempPet = type; document.querySelectorAll('.pet-select-card').forEach(el => el.classList.remove('selected')); document.getElementById(`sel-${type}`).classList.add('selected'); },
         confirmPetSelection: async () => { const petName = document.getElementById('pet-name-input').value.trim(); const prices = { 'dog': 100, 'cat': 150, 'bunny': 200 }; if (!selectedTempPet) return alert("Vui lòng chọn 1 con vật!"); if (!petName) return alert("Đặt tên cho bé nhé!"); if (currentUser.coins < prices[selectedTempPet]) return alert(`Bạn cần ${prices[selectedTempPet]} Xu để nhận nuôi bé này!`); if(confirm(`Bạn có chắc muốn nhận nuôi với giá ${prices[selectedTempPet]} Xu?`)) { try { const petData = { type: selectedTempPet, name: petName, level: 1, exp: 0, hunger: 100, fun: 100, hygiene: 100, lastInteraction: Date.now(), accessory: null }; await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: petData, coins: increment(-prices[selectedTempPet]) }); alert("Chúc mừng bạn đã nhận nuôi thú cưng!"); window.app.renderPetGame(); } catch(e) { alert("Lỗi: " + e.message); } } },
-        checkPetStatus: async () => { if(!currentUser.pet) { window.app.renderPetGame(); return; } const p = currentUser.pet; if (isNaN(p.hunger)) p.hunger = 100; if (isNaN(p.fun)) p.fun = 100; if (isNaN(p.hygiene)) p.hygiene = 100; if(p.isDead) { window.app.renderPetGame(); return; } const now = Date.now(); if (!p.lastInteraction) p.lastInteraction = now; const hoursPassed = (now - p.lastInteraction) / (1000 * 60 * 60); if (hoursPassed >= 1) { const reduction = Math.floor(hoursPassed / 24 * 20); if(reduction > 0) { let newHunger = Math.max(0, p.hunger - reduction); let newFun = Math.max(0, p.fun - reduction); let newHygiene = Math.max(0, p.hygiene - reduction); let isDead = false; if(newHunger <= 0) { const daysStarving = hoursPassed / 24; if (daysStarving >= 5) isDead = true; } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { "pet.hunger": newHunger, "pet.fun": newFun, "pet.hygiene": newHygiene, "pet.isDead": isDead, "pet.lastInteraction": now }); } } window.app.renderPetGame(); },
+        checkPetStatus: async () => {
+            if(!currentUser.pet) { window.app.renderPetGame(); return; }
+            const p = currentUser.pet;
+
+            // Kiểm tra và sửa lỗi nếu chỉ số bị NaN (Lỗi dữ liệu cũ)
+            if (isNaN(p.hunger)) p.hunger = 100;
+            if (isNaN(p.fun)) p.fun = 100;
+            if (isNaN(p.hygiene)) p.hygiene = 100;
+
+            if(p.isDead) { window.app.renderPetGame(); return; }
+
+            const now = Date.now();
+            // Nếu chưa có mốc thời gian, đặt mốc là hiện tại
+            if (!p.lastInteraction) p.lastInteraction = now;
+
+            // Tính số PHÚT đã trôi qua (Thay vì tính giờ như cũ)
+            const minutesPassed = (now - p.lastInteraction) / (1000 * 60);
+
+            // CẤU HÌNH: Cứ mỗi 10 phút sẽ giảm 1 điểm (Bạn có thể sửa số 10 thành số khác)
+            const DECAY_TIME = 10; 
+
+            // Chỉ cập nhật nếu đã trôi qua đủ thời gian cấu hình
+            if (minutesPassed >= DECAY_TIME) {
+                const reduction = Math.floor(minutesPassed / DECAY_TIME); 
+
+                if(reduction > 0) {
+                    let newHunger = Math.max(0, p.hunger - reduction);
+                    let newFun = Math.max(0, p.fun - reduction);
+                    let newHygiene = Math.max(0, p.hygiene - reduction);
+                    
+                    let isDead = false;
+                    // Nếu đói quá lâu (về 0) thì sẽ chết
+                    if(newHunger <= 0) isDead = true; 
+
+                    try {
+                        // Cập nhật vào Firebase
+                        await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                            "pet.hunger": newHunger, 
+                            "pet.fun": newFun, 
+                            "pet.hygiene": newHygiene, 
+                            "pet.isDead": isDead, 
+                            "pet.lastInteraction": now // Reset mốc thời gian về hiện tại
+                        });
+
+                        // Cập nhật ngay vào biến cục bộ để hiển thị luôn không cần reload
+                        currentUser.pet.hunger = newHunger;
+                        currentUser.pet.fun = newFun;
+                        currentUser.pet.hygiene = newHygiene;
+                        currentUser.pet.isDead = isDead;
+                        currentUser.pet.lastInteraction = now;
+                    } catch(e) {
+                        console.error("Lỗi cập nhật thú cưng:", e);
+                    }
+                }
+            }
+            window.app.renderPetGame();
+        },
         renderPetGame: () => { const p = currentUser.pet; const setup = document.getElementById('pet-select-screen'); const main = document.getElementById('pet-main-screen'); if(!p) { setup.classList.remove('hidden'); main.classList.add('hidden'); return; } setup.classList.add('hidden'); main.classList.remove('hidden'); const images = { cat: 'https://i.pinimg.com/originals/9e/6d/c0/9e6dc0a2a7f7924dd040854a7fbcb988.gif', dog: 'https://i.pinimg.com/originals/1a/ad/ea/1aadea234ad1b805c2d39cd892abdfad.gif', bunny: 'https://i.pinimg.com/originals/3a/0e/11/3a0e1105df06e7a3a24d0229920fb1d3.gif' }; const bg = document.getElementById('pet-stage-bg'); if (p.type && images[p.type]) { const bgs = { cat: 'url("https://png.pngtree.com/thumb_back/fh260/background/20211114/pngtree-bright-orange-living-room-illustration-image_916011.png")', dog: 'url("https://img.freepik.com/vector-cao-cap/minh-hoa-vector-ve-noi-that-phong-khach-tuyet-dep-canh-hoat-hinh-ve-phong-khach-voi-cua-so-ghe-sofa-goi-tua-hinh-anh-ban-tron-binh-hoa-va-cau-thang-len-tang-hai_812561-961.jpg")', bunny: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtree-cartoon-forest-environment-illstration-image_1401354.jpg")' }; bg.style.backgroundImage = bgs[p.type]; const petEl = document.getElementById('pet-display'); const currentUrl = petEl.style.backgroundImage; const newUrl = `url("${images[p.type]}")`; if(currentUrl !== newUrl && currentUrl !== newUrl.replace(/"/g, "'")) { petEl.style.backgroundImage = newUrl; } } const petEl = document.getElementById('pet-display'); if(p.isDead) { document.getElementById('pet-dead-overlay').classList.remove('hidden'); petEl.classList.add('pet-dead'); window.app.stopPetWandering(); } else { document.getElementById('pet-dead-overlay').classList.add('hidden'); petEl.classList.remove('pet-dead'); window.app.startPetWandering(); } document.getElementById('pet-name-display').textContent = p.name; document.getElementById('pet-level').textContent = p.level || 1; document.getElementById('pet-exp').textContent = `${Math.floor(p.exp||0)}/100`; const setBar = (id, v) => { const val = Math.max(0, Math.min(100, v || 0)); document.getElementById('bar-'+id).style.width = `${val}%`; document.getElementById('val-'+id).textContent = `${Math.floor(val)}%`; }; setBar('hunger', p.hunger); setBar('fun', p.fun); setBar('hygiene', p.hygiene); window.app.renderPetWaste(p.hygiene || 0); },
         renderPetWaste: (hygiene) => { const container = document.getElementById('pet-waste-container'); if (!container) return; container.innerHTML = ''; const h = Number(hygiene) || 0; const wasteCount = Math.floor((100 - h) / 10); for (let i = 0; i < wasteCount; i++) { const poop = document.createElement('span'); poop.innerHTML = '💩'; poop.className = 'absolute text-3xl drop-shadow-md animate-bounce'; const fixedX = 15 + ((i * 15) % 70); const fixedY = 75 + ((i % 2) * 5); poop.style.left = fixedX + '%'; poop.style.top = fixedY + '%'; poop.style.zIndex = "30"; poop.style.position = "absolute"; container.appendChild(poop); } },
         startPetWandering: () => { 
@@ -1522,10 +1578,6 @@ let _cachedGeminiKey = null;
 </body>
 
 </html>
-
-
-
-
 
 
 
