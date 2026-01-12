@@ -1400,72 +1400,70 @@ let _cachedGeminiKey = null;
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             
-            // Hiệu ứng "Đang nghĩ" vui nhộn
-            const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow..."];
+            // Hiệu ứng icon vui nhộn
+            const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow...", "❤️"];
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // BƯỚC 1: LẤY API KEY (Chỉ lấy 1 lần đầu tiên, các lần sau dùng lại ngay lập tức)
+            // --- PHẦN QUAN TRỌNG: GIỮ NGUYÊN CÁCH LẤY KEY TỪ FIRESTORE CỦA BẠN ---
             if (!_cachedGeminiKey) {
                 try {
-                    // Lấy Key từ Firestore
+                    // Lấy Key từ artifacts/system_config (Code cũ của bạn)
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get();
                     if (keySnap.exists && keySnap.data().gemini) {
                         _cachedGeminiKey = keySnap.data().gemini;
                     } else {
-                        throw new Error("Chưa cấu hình Key trong hệ thống (artifacts/system_config).");
+                        console.error("Chưa cấu hình Key trong hệ thống (artifacts/system_config).");
+                        chatText.textContent = "Lỗi: Chưa có Key AI.";
+                        return;
                     }
                 } catch (e) {
                     console.error("Lỗi lấy Key:", e);
-                    // Nếu lỗi lấy Key, thử dùng Key mặc định trong file (nếu có) hoặc báo lỗi
-                    chatText.textContent = "Lỗi kết nối hệ thống. Thử lại sau nhé!";
-                    setTimeout(() => bubble.classList.add('hidden'), 5000);
+                    chatText.textContent = "Lỗi kết nối hệ thống.";
                     return;
                 }
             }
 
+            // --- PHẦN TỐI ƯU TỐC ĐỘ: GỌI THẲNG MODEL (KHÔNG HỎI DANH SÁCH NỮA) ---
             try {
-                // BƯỚC 2: GỌI TRỰC TIẾP MODEL FLASH (Bỏ qua bước ListModels để chạy siêu tốc)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
-                
-                // Tạo câu nhắc (Prompt) ngắn gọn, phù hợp với thú cưng
-                const prompt = `Đóng vai thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Trả lời cực ngắn (dưới 15 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
+                // Tạo câu nhắc (Prompt)
+                const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
 
-                const res = await fetch(url, {
+                // 1. Thử gọi model nhanh nhất (Flash)
+                let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
+                
+                let res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
 
+                // 2. Nếu Flash lỗi (404), tự động chuyển sang Pro (Dự phòng)
                 if (!res.ok) {
-                    // Nếu Flash lỗi, thử fallback sang Pro (Dự phòng)
-                    console.warn("Flash lỗi, thử sang Pro...");
-                    const urlPro = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${_cachedGeminiKey}`;
-                    const resPro = await fetch(urlPro, {
+                    console.log("Flash lỗi, thử sang Pro...");
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${_cachedGeminiKey}`;
+                    res = await fetch(url, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                     });
-                    if(!resPro.ok) throw new Error("Thú cưng đang ngủ (Mất kết nối)");
-                    var data = await resPro.json();
-                } else {
-                    var data = await res.json();
                 }
+
+                if (!res.ok) throw new Error("Mất kết nối với thú cưng");
+
+                const data = await res.json();
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
                 
-                // Lấy nội dung trả lời an toàn
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu gâu? (Em không hiểu)";
-                
-                // Hiển thị và đọc
+                // Hiển thị kết quả
                 chatText.textContent = reply;
                 window.app.speak(reply);
                 
-                // Hiệu ứng nhảy
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
                 console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic, mạng lag quá ạ! 🌐";
+                chatText.textContent = "Mạng lag quá ạ! 🌐";
                 setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
