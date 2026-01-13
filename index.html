@@ -1297,7 +1297,7 @@ let _cachedGeminiKey = null;
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // BƯỚC 1: LẤY KEY (GIỮ NGUYÊN CODE BẠN ĐANG CÓ - ĐÃ HOẠT ĐỘNG)
+            // --- BƯỚC 1: LẤY KEY TỪ FIRESTORE (GIỮ NGUYÊN) ---
             if (!_cachedGeminiKey) {
                 try {
                     const user = firebase.auth().currentUser;
@@ -1316,47 +1316,53 @@ let _cachedGeminiKey = null;
                 }
             }
 
-            // BƯỚC 2: GỌI AI (SỬA TÊN MODEL CHO ĐÚNG VỚI KEY CỦA BẠN)
-            try {
-                const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
+            // --- BƯỚC 2: CHIẾN THUẬT "THỬ LẦN LƯỢT" (ĐỂ KHÔNG BAO GIỜ BỊ 404) ---
+            const modelsToTry = [
+                'gemini-1.5-flash',      // Ưu tiên 1: Nhanh nhất
+                'gemini-1.0-pro',        // Ưu tiên 2: Ổn định nhất (Key 6 thích cái này)
+                'gemini-pro'             // Ưu tiên 3: Bản cũ
+            ];
 
-                // Ưu tiên 1: Thử Flash (Nhanh nhất)
-                let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
-                
-                let res = await fetch(url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
+            const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
+            
+            let success = false;
 
-                // Ưu tiên 2: Nếu Flash lỗi 404, dùng 'gemini-1.0-pro' (BẮT BUỘC PHẢI LÀ TÊN NÀY)
-                if (!res.ok) {
-                    console.warn("Flash lỗi, chuyển sang gemini-1.0-pro...");
-                    // SỬA Ở ĐÂY: Dùng đúng tên 'gemini-1.0-pro' thay vì 'gemini-pro'
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${_cachedGeminiKey}`;
+            // Vòng lặp thử từng model
+            for (const modelName of modelsToTry) {
+                try {
+                    console.log("Đang thử model:", modelName);
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${_cachedGeminiKey}`;
                     
-                    res = await fetch(url, {
+                    const res = await fetch(url, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                     });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
+                        
+                        chatText.textContent = reply;
+                        window.app.speak(reply);
+                        success = true;
+                        break; // Thành công rồi thì thoát vòng lặp ngay
+                    } else {
+                        console.warn(`Model ${modelName} bị lỗi ${res.status}, thử cái tiếp theo...`);
+                    }
+                } catch (err) {
+                    console.warn(`Lỗi kết nối với ${modelName}`, err);
                 }
+            }
 
-                if (!res.ok) throw new Error("Mất kết nối với thú cưng");
-
-                const data = await res.json();
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
-                
-                chatText.textContent = reply;
-                window.app.speak(reply);
-                
+            // Nếu thử hết cả 3 cái mà vẫn không được
+            if (!success) {
+                chatText.textContent = "Lỗi: Key chặn web này hoặc hết hạn mức.";
+                setTimeout(() => bubble.classList.add('hidden'), 6000);
+            } else {
+                // Hiệu ứng nhảy nếu thành công
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
-
-            } catch(e) {
-                console.error("Lỗi AI:", e);
-                chatText.textContent = "Thú cưng đang ngủ... (Lỗi mạng)";
-                setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
         
