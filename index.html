@@ -1136,15 +1136,23 @@ msgs.forEach(m => {
                     const row = document.createElement('div'); 
                     row.className = `chat-row ${isMine ? 'mine' : 'theirs'}`; 
                     
-                    // --- ĐOẠN CẦN SỬA ---
-                    let avatarUrl = 'https://via.placeholder.com/32?text=U'; 
+                    // --- ĐOẠN ĐÃ SỬA: SỬ DỤNG getAvatarHtml ĐỂ HIỆN KHUNG ---
+                    let targetUid = m.uid;
+                    let avatarUrl = 'https://via.placeholder.com/32?text=U';
+
+                    // Xác định ID chuẩn để lấy thông tin khung
                     if(m.uid === 'admin' || m.user === 'Cô Giáo') { 
+                        targetUid = 'admin'; 
                         avatarUrl = window.app.userCache['admin']?.avatarUrl || avatarUrl; 
                     } else { 
                         avatarUrl = window.app.userCache[m.uid]?.avatarUrl || avatarUrl; 
                     } 
-                    const avatarImg = `<img src="${avatarUrl}" class="chat-avatar" title="${m.user}">`; 
-                    // --------------------
+
+                    // Gọi hàm getAvatarHtml: Tự động thêm khung Vàng/Bạc nếu có
+                    // 'w-9 h-9' = 36px (Giữ nguyên kích thước cũ của chatbox)
+                    // 'chat-avatar' = Giữ nguyên style bo tròn cũ
+                    const avatarImg = getAvatarHtml(targetUid, avatarUrl, 'w-9 h-9', 'chat-avatar');
+                    // --------------------------------------------------------
 
                     if (isMine) { 
                         row.innerHTML = `<div class="chat-msg mine">${m.text}</div>${avatarImg}`; 
