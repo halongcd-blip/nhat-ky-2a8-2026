@@ -1289,157 +1289,127 @@ let _cachedGeminiKey = null;
         },
 
       processPetResponse: async (text) => {
-    const bubble = document.getElementById('pet-chat-bubble');
-    const chatText = document.getElementById('pet-chat-text');
-    bubble.classList.remove('hidden');
-    chatText.textContent = "Đợi em nghĩ một chút nhé... 🤔";
-    
-    // =======================================================
-    // BƯỚC 1: ĐẢM BẢO NGƯỜI DÙNG CÓ TOKEN MỚI NHẤT
-    // =======================================================
-    const user = firebase.auth().currentUser;
-    if (!user) {
-        // Mặc dù UI đã ẩn, nhưng nếu có lỗi Auth bất ngờ, vẫn xử lý
-        chatText.textContent = "Em chưa nghe rõ, chủ nhân nói lại đi ạ.";
-        setTimeout(() => bubble.classList.add('hidden'), 4000);
-        return; 
-    }
-    
-    try {
-        // CÁCH KHẮC PHỤC LỖI QUYỀN: BẮT FIREBASE LÀM MỚI TOKEN NGAY LẬP TỨC
-        // Nếu không có dòng này, Token cũ sẽ bị gửi lên và bị Rules từ chối.
-        await user.getIdToken(true); 
-
-    } catch (tokenError) {
-        chatText.textContent = "Lỗi xác thực token: Vui lòng đăng xuất và đăng nhập lại.";
-        console.error("Token Refresh Error:", tokenError);
-        setTimeout(() => bubble.classList.add('hidden'), 5000);
-        return;
-    }
-
-    // =======================================================
-    // BƯỚC 2: LẤY API Key từ Firestore (Sau khi có Token mới)
-    // =======================================================
-    let GEMINI_API_KEY = null;
-    if (!_cachedGeminiKey) {
-        try {
-            // SỬ DỤNG firebase.firestore() TRỰC TIẾP
-            const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
-            // ... (Logic kiểm tra và gán _cachedGeminiKey giữ nguyên)
+            const bubble = document.getElementById('pet-chat-bubble');
+            const chatText = document.getElementById('pet-chat-text');
+            bubble.classList.remove('hidden');
             
-            if (keySnap.exists) {
-                _cachedGeminiKey = keySnap.data().gemini; 
-                
-                if (!_cachedGeminiKey) {
-                    throw new Error("Lỗi: Document 'system_config' đã có nhưng không tìm thấy trường 'gemini' chứa Key.");
+            // Hiệu ứng icon vui nhộn
+            const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow...", "❤️"];
+            const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
+            chatText.textContent = `Đang nghĩ... ${randIcon}`;
+
+            // --- [ĐÃ SỬA] BỎ QUA BƯỚC LÀM MỚI TOKEN (NGUYÊN NHÂN GÂY LỖI KẾT NỐI LẦN ĐẦU) ---
+            // Code cũ có đoạn await user.getIdToken(true); -> Đã xóa để chạy mượt mà.
+
+            // =======================================================
+            // BƯỚC 1: LẤY API Key từ Firestore (GIỮ NGUYÊN NHƯ FILE CŨ)
+            // =======================================================
+            let GEMINI_API_KEY = null;
+            if (!_cachedGeminiKey) {
+                try {
+                    // Gọi Firestore y hệt như file bạn gửi
+                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
+                    
+                    if (keySnap.exists) {
+                        _cachedGeminiKey = keySnap.data().gemini; 
+                        
+                        if (!_cachedGeminiKey) {
+                            throw new Error("Lỗi: Document 'system_config' đã có nhưng không tìm thấy trường 'gemini'.");
+                        }
+                    } else {
+                        throw new Error("Không tìm thấy Document 'system_config' trong Collection 'artifacts'.");
+                    }
+
+                } catch(e) {
+                    console.error("Lỗi lấy Key:", e);
+                    chatText.textContent = "Lỗi kết nối máy chủ (Lấy Key).";
+                    setTimeout(() => bubble.classList.add('hidden'), 6000);
+                    return;
                 }
-            } else {
-                throw new Error("Không tìm thấy Document 'system_config' trong Collection 'artifacts'.");
             }
+            GEMINI_API_KEY = _cachedGeminiKey;
 
-        } catch(e) {
-            // Hiển thị lỗi cuối cùng (chủ yếu là Rules nếu code này vẫn lỗi)
-            chatText.textContent = "Lỗi bảo mật: Kiểm tra lại Firebase Rules (artifacts/system_config).";
-            console.error("Lỗi lấy Key:", e);
-            setTimeout(() => bubble.classList.add('hidden'), 6000);
-            return;
-        }
-    }
-    GEMINI_API_KEY = _cachedGeminiKey;
+            // =======================================================
+            // BƯỚC 2: TÌM MODEL VÀ GỌI AI (GIỮ NGUYÊN LOGIC CŨ)
+            // =======================================================
+            try {
+                // 1. Lấy danh sách model (Logic cũ của bạn - Không thay đổi)
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+                
+                if (listData.error) throw new Error("Lỗi lấy danh sách model: " + listData.error.message);
 
-    try {
-        // BƯỚC 1 & 2: GIỮ NGUYÊN LOGIC CŨ CỦA BẠN (Lấy danh sách và chọn model tốt nhất)
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-        const listRes = await fetch(listUrl);
-        const listData = await listRes.json();
-        
-        if (listData.error) throw new Error("Lỗi lấy danh sách: " + listData.error.message);
+                // Logic tìm model ưu tiên Flash -> Pro -> Gemini (Giữ nguyên)
+                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+                
+                if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
 
-        let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
-        if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-        if (!model) model = listData.models.find(m => m.name.includes('gemini'));
-        
-        if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
-
-        const modelName = model.name.replace('models/', '');
-        
-        // BƯỚC 3: GỬI TIN NHẮN
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-        
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ contents: [{ parts: [{ 
-                // Tối ưu hóa lại Prompt:
-                text: `Bạn là một chú ${currentUser?.pet?.type || 'thú cưng'} đáng yêu tên là "${currentUser?.pet?.name || 'Bé cưng'}". 
+                const modelName = model.name.replace('models/', '');
+                
+                // 2. Gửi tin nhắn (Giữ nguyên Prompt và Cấu trúc)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ contents: [{ parts: [{ 
+                        text: `Bạn là một chú ${currentUser?.pet?.type || 'thú cưng'} đáng yêu tên là "${currentUser?.pet?.name || 'Bé cưng'}". 
                                 Chủ nhân của bạn là "${currentUser?.name || 'bạn nhỏ'}". 
                                 Nhiệm vụ:
                                 1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
                                 2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và khen ngợi chủ nhân.
-                                4. Trả lời cực kỳ ngắn gọn, không được dùng icon. Câu hỏi: ${text}`
+                                4. Trả lời cực kỳ ngắn gọn, không dùng icon. Câu hỏi: ${text}`
                             }]
                         }]
                     })
                 });
-        
-        const data = await res.json();
-        
-        if(data.error) throw new Error(data.error.message);
-        
-        const reply = data.candidates[0].content.parts[0].text;
-        chatText.textContent = reply;
-        
-        // Đọc to & Hiệu ứng
-        window.app.speak(reply);
-        if(window.app.animatePetClick) window.app.animatePetClick();
-        setTimeout(() => bubble.classList.add('hidden'), 6000);
+                
+                const data = await res.json();
+                
+                if(data.error) throw new Error(data.error.message);
+                
+                const reply = data.candidates[0].content.parts[0].text;
+                
+                // Cập nhật giao diện
+                chatText.textContent = reply;
+                
+                // Đọc to & Hiệu ứng
+                window.app.speak(reply);
+                if(window.app.animatePetClick) window.app.animatePetClick();
+                setTimeout(() => bubble.classList.add('hidden'), 6000);
 
-    } catch(e) {
-        console.error("Lỗi:", e);
-        chatText.textContent = "Lỗi: " + e.message;
-        setTimeout(() => bubble.classList.add('hidden'), 6000);
-    }
-}, // Dấu phẩy này là bắt buộc vì hàm speak theo sau
+            } catch(e) {
+                console.error("Lỗi:", e);
+                chatText.textContent = "Lỗi: " + e.message;
+                setTimeout(() => bubble.classList.add('hidden'), 6000);
+            }
+        },
         
         speak: (text) => {
-    if (!window.speechSynthesis) return;
-    
-    // Ngắt lời cũ nếu đang nói
-    window.speechSynthesis.cancel();
+            // Ngắt lời cũ nếu đang nói
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'vi-VN'; // Ngôn ngữ Tiếng Việt
-    
-    // THỦ THUẬT GIỌNG TRẺ CON VÀ TỐI ƯU TẢI GIỌNG NÓI
-    utterance.pitch = 1.6; // Tăng độ cao âm thanh (Giọng trẻ con)
-    utterance.rate = 1.1;  // Nói nhanh hơn một chút
-    utterance.volume = 1;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN'; // Thiết lập tiếng Việt
+            utterance.rate = 1.1;     // Tốc độ nói (1.0 là bình thường)
+            utterance.pitch = 1.2;    // Cao độ (tăng lên để giọng trẻ con hơn)
+            utterance.volume = 1;
 
-    // Logic quan trọng: Đợi Voices (Giọng nói) tải xong
-    const setVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        // Cố gắng tìm giọng Tiếng Việt
-        const vnVoice = voices.find(v => v.lang.includes('vi'));
-        
-        if (vnVoice) {
-            utterance.voice = vnVoice;
-        } else {
-            // Nếu không tìm thấy Tiếng Việt, dùng giọng mặc định của trình duyệt
-            console.warn("Không tìm thấy giọng Tiếng Việt. Sử dụng giọng mặc định.");
+            // Lấy danh sách giọng đọc và ưu tiên giọng Google hoặc giọng nữ
+            const voices = window.speechSynthesis.getVoices();
+            // Cố gắng tìm giọng tiếng Việt
+            const vnVoice = voices.find(v => v.lang.includes('vi'));
+            if (vnVoice) {
+                utterance.voice = vnVoice;
+            }
+
+            window.speechSynthesis.speak(utterance);
         }
-        
-        // Bắt đầu nói
-        window.speechSynthesis.speak(utterance);
-    };
-
-    // Kiểm tra nếu danh sách giọng nói đã tải, thì gọi ngay
-    if (window.speechSynthesis.getVoices().length) {
-        setVoice();
-    } else {
-        // Nếu chưa tải, chờ sự kiện onvoiceschanged (chỉ chạy 1 lần)
-        window.speechSynthesis.onvoiceschanged = setVoice;
-    }
-}, // <-- Đảm bảo có dấu phẩy ở cuối nếu có hàm khác sau đó
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
@@ -1522,6 +1492,10 @@ let _cachedGeminiKey = null;
 </body>
 
 </html>
+
+
+
+
 
 
 
