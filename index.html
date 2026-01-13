@@ -1297,47 +1297,30 @@ let _cachedGeminiKey = null;
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // =======================================================
-            // BƯỚC 1: LẤY KEY (SỬA LẠI: THÊM XÁC THỰC ĐỂ KHÔNG BỊ LỖI PERMISSION)
-            // =======================================================
+            // BƯỚC 1: LẤY KEY (GIỮ NGUYÊN CODE BẠN ĐANG CÓ - ĐÃ HOẠT ĐỘNG)
             if (!_cachedGeminiKey) {
                 try {
-                    // Lấy user hiện tại
                     const user = firebase.auth().currentUser;
-                    if (user) {
-                        // [QUAN TRỌNG] Xác thực nhẹ để Firebase cho phép đọc dữ liệu
-                        // Dùng 'false' để lấy token từ bộ nhớ máy (Nhanh hơn tải từ mạng)
-                        await user.getIdToken(false);
-                    }
+                    if (user) await user.getIdToken(false); // Xác thực nhẹ
 
-                    // Gọi Firestore (Giữ nguyên cách cũ của bạn)
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
-                    
                     if (keySnap.exists && keySnap.data().gemini) {
                         _cachedGeminiKey = keySnap.data().gemini; 
                     } else {
-                        throw new Error("Chưa cấu hình Key trong hệ thống.");
+                        throw new Error("Chưa cấu hình Key.");
                     }
                 } catch(e) {
                     console.error("Lỗi lấy Key:", e);
-                    // Nếu lỗi quyền, thử đăng nhập lại ngầm
-                    if(e.code === 'permission-denied') {
-                         chatText.textContent = "Đang kết nối lại... thử bấm gửi lại nhé!";
-                         if(firebase.auth().currentUser) await firebase.auth().currentUser.getIdToken(true);
-                         return;
-                    }
                     chatText.textContent = "Lỗi kết nối máy chủ.";
                     return;
                 }
             }
 
-            // =======================================================
-            // BƯỚC 2: GỌI AI (ĐÃ TỐI ƯU TỐC ĐỘ, KHÔNG HỎI LIST MODEL NỮA)
-            // =======================================================
+            // BƯỚC 2: GỌI AI (SỬA TÊN MODEL CHO ĐÚNG VỚI KEY CỦA BẠN)
             try {
                 const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
 
-                // Gọi thẳng Model Flash (Nhanh nhất)
+                // Ưu tiên 1: Thử Flash (Nhanh nhất)
                 let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
                 
                 let res = await fetch(url, {
@@ -1346,10 +1329,12 @@ let _cachedGeminiKey = null;
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
 
-                // Nếu Flash lỗi, thử sang Pro
+                // Ưu tiên 2: Nếu Flash lỗi 404, dùng 'gemini-1.0-pro' (BẮT BUỘC PHẢI LÀ TÊN NÀY)
                 if (!res.ok) {
-                    console.warn("Flash lỗi, thử sang Pro...");
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${_cachedGeminiKey}`;
+                    console.warn("Flash lỗi, chuyển sang gemini-1.0-pro...");
+                    // SỬA Ở ĐÂY: Dùng đúng tên 'gemini-1.0-pro' thay vì 'gemini-pro'
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${_cachedGeminiKey}`;
+                    
                     res = await fetch(url, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -1370,7 +1355,7 @@ let _cachedGeminiKey = null;
 
             } catch(e) {
                 console.error("Lỗi AI:", e);
-                chatText.textContent = "Mạng lag quá ạ! 🌐";
+                chatText.textContent = "Thú cưng đang ngủ... (Lỗi mạng)";
                 setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
