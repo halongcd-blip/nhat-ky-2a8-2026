@@ -1130,7 +1130,30 @@ let _cachedGeminiKey = null;
         logout: () => { if(confirm("Đăng xuất?")) { localStorage.removeItem(USER_STORAGE_KEY); location.reload(); } },
         goHome: () => { if (unsubscribeFeed) { unsubscribeFeed(); unsubscribeFeed = null; } document.getElementById('detail-view').classList.remove('active-block'); document.getElementById('dashboard-view').classList.add('active-block'); window.scrollTo(0,0); },
         
-        loadChat: () => { if(unsubscribeChat) unsubscribeChat(); const q = query(collection(db, `artifacts/${appId}/chat`), orderBy('date', 'desc'), limit(75)); unsubscribeChat = onSnapshot(q, (snap) => { const chatBox = document.getElementById('chat-messages'); chatBox.innerHTML = ''; if (snap.empty) { chatBox.innerHTML = '<div class="text-center text-gray-400 text-xs mt-2">Chưa có tin nhắn nào.</div>'; return; } const msgs = []; snap.forEach(doc => msgs.push(doc.data())); msgs.reverse(); msgs.forEach(m => { const isMine = m.uid === currentUser.id; const row = document.createElement('div'); row.className = `chat-row ${isMine ? 'mine' : 'theirs'}`; let avatarUrl = 'https://via.placeholder.com/32?text=U'; if(m.uid === 'admin' || m.user === 'Cô Giáo') { avatarUrl = window.app.userCache['admin']?.avatarUrl || avatarUrl; } else { avatarUrl = window.app.userCache[m.uid]?.avatarUrl || avatarUrl; } const avatarImg = `<img src="${avatarUrl}" class="chat-avatar" title="${m.user}">`; if (isMine) { row.innerHTML = `<div class="chat-msg mine">${m.text}</div>${avatarImg}`; } else { row.innerHTML = `${avatarImg}<div class="flex flex-col"><span class="text-[10px] text-gray-500 ml-1 mb-0.5">${m.user}</span><div class="chat-msg theirs">${m.text}</div></div>`; } chatBox.appendChild(row); }); chatBox.scrollTop = chatBox.scrollHeight; }); },
+        loadChat: () => { if(unsubscribeChat) unsubscribeChat(); const q = query(collection(db, `artifacts/${appId}/chat`), orderBy('date', 'desc'), limit(75)); unsubscribeChat = onSnapshot(q, (snap) => { const chatBox = document.getElementById('chat-messages'); chatBox.innerHTML = ''; if (snap.empty) { chatBox.innerHTML = '<div class="text-center text-gray-400 text-xs mt-2">Chưa có tin nhắn nào.</div>'; return; } const msgs = []; snap.forEach(doc => msgs.push(doc.data())); msgs.reverse(); 
+msgs.forEach(m => { 
+                    const isMine = m.uid === currentUser.id; 
+                    const row = document.createElement('div'); 
+                    row.className = `chat-row ${isMine ? 'mine' : 'theirs'}`; 
+                    
+                    // --- ĐOẠN CẦN SỬA ---
+                    let avatarUrl = 'https://via.placeholder.com/32?text=U'; 
+                    if(m.uid === 'admin' || m.user === 'Cô Giáo') { 
+                        avatarUrl = window.app.userCache['admin']?.avatarUrl || avatarUrl; 
+                    } else { 
+                        avatarUrl = window.app.userCache[m.uid]?.avatarUrl || avatarUrl; 
+                    } 
+                    const avatarImg = `<img src="${avatarUrl}" class="chat-avatar" title="${m.user}">`; 
+                    // --------------------
+
+                    if (isMine) { 
+                        row.innerHTML = `<div class="chat-msg mine">${m.text}</div>${avatarImg}`; 
+                    } else { 
+                        row.innerHTML = `${avatarImg}<div class="flex flex-col"><span class="text-[10px] text-gray-500 ml-1 mb-0.5">${m.user}</span><div class="chat-msg theirs">${m.text}</div></div>`; 
+                    } 
+                    chatBox.appendChild(row); 
+                });
+ chatBox.scrollTop = chatBox.scrollHeight; }); },
         sendChat: async () => { const inp = document.getElementById('chat-input'); const text = inp.value.trim(); if(!text) return; try { await addDoc(collection(db, `artifacts/${appId}/chat`), { text: text, user: currentUser.name, uid: currentUser.id, avatar: currentUser.avatarUrl || '', date: new Date().toISOString() }); inp.value = ''; } catch(e) { alert("Lỗi gửi tin: " + e.message); } },
         addEmojiToChat: (emoji) => { const inp = document.getElementById('chat-input'); inp.value += emoji; inp.focus(); },
         addEmojiToCmt: (id, emoji) => { const inp = document.getElementById(`cmt-${id}`); if(inp) { inp.value += emoji; inp.focus(); } },
