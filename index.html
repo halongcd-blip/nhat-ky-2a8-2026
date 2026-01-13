@@ -923,6 +923,10 @@ let _cachedGeminiKey = null;
                     const myData = window.app.userCache[currentUser.id];
                     currentUser.coins = myData.coins || 0;
                     currentUser.pet = myData.pet; 
+// --- [BẮT BUỘC THÊM] CẬP NHẬT KHUNG VÀ TÚI ĐỒ ---
+                    currentUser.frame = myData.frame;          // Cập nhật khung đang đeo
+                    currentUser.inventory = myData.inventory;  // Cập nhật danh sách đồ đã mua
+                    // ----------------------------------------------------
                     const coinEl = document.getElementById('current-coins');
                     if(coinEl) coinEl.textContent = currentUser.coins;
                     if(currentTab === 'shop' && window.app.renderInventory) window.app.renderInventory();
@@ -1289,82 +1293,117 @@ let _cachedGeminiKey = null;
         },
 
       processPetResponse: async (text) => {
-            const bubble = document.getElementById('pet-chat-bubble');
-            const chatText = document.getElementById('pet-chat-text');
-            bubble.classList.remove('hidden');
+    const bubble = document.getElementById('pet-chat-bubble');
+    const chatText = document.getElementById('pet-chat-text');
+    bubble.classList.remove('hidden');
+    chatText.textContent = "Đợi em nghĩ một chút nhé... 🤔";
+    
+    // =======================================================
+    // BƯỚC 1: ĐẢM BẢO NGƯỜI DÙNG CÓ TOKEN MỚI NHẤT
+    // =======================================================
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        // Mặc dù UI đã ẩn, nhưng nếu có lỗi Auth bất ngờ, vẫn xử lý
+        chatText.textContent = "Em chưa nghe rõ, chủ nhân nói lại đi ạ.";
+        setTimeout(() => bubble.classList.add('hidden'), 4000);
+        return; 
+    }
+    
+    try {
+        // CÁCH KHẮC PHỤC LỖI QUYỀN: BẮT FIREBASE LÀM MỚI TOKEN NGAY LẬP TỨC
+        // Nếu không có dòng này, Token cũ sẽ bị gửi lên và bị Rules từ chối.
+        await user.getIdToken(true); 
+
+    } catch (tokenError) {
+        chatText.textContent = "Lỗi xác thực token: Vui lòng đăng xuất và đăng nhập lại.";
+        console.error("Token Refresh Error:", tokenError);
+        setTimeout(() => bubble.classList.add('hidden'), 5000);
+        return;
+    }
+
+    // =======================================================
+    // BƯỚC 2: LẤY API Key từ Firestore (Sau khi có Token mới)
+    // =======================================================
+    let GEMINI_API_KEY = null;
+    if (!_cachedGeminiKey) {
+        try {
+            // SỬ DỤNG firebase.firestore() TRỰC TIẾP
+            const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
+            // ... (Logic kiểm tra và gán _cachedGeminiKey giữ nguyên)
             
-            const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow...", "❤️"];
-            const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
-            chatText.textContent = `Đang nghĩ... ${randIcon}`;
-
-            // --- BƯỚC 1: LẤY KEY TỪ FIRESTORE (GIỮ NGUYÊN CODE CŨ) ---
-            // Chúng ta vẫn lấy key từ hệ thống như bạn yêu cầu
-            if (!_cachedGeminiKey) {
-                try {
-                    const user = firebase.auth().currentUser;
-                    if (user) await user.getIdToken(false); 
-
-                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
-                    if (keySnap.exists && keySnap.data().gemini) {
-                        _cachedGeminiKey = keySnap.data().gemini; 
-                        console.log("Key lấy từ Firestore:", _cachedGeminiKey); // Xem key này là gì
-                    }
-                } catch(e) {
-                    console.error("Lỗi lấy Key:", e);
+            if (keySnap.exists) {
+                _cachedGeminiKey = keySnap.data().gemini; 
+                
+                if (!_cachedGeminiKey) {
+                    throw new Error("Lỗi: Document 'system_config' đã có nhưng không tìm thấy trường 'gemini' chứa Key.");
                 }
+            } else {
+                throw new Error("Không tìm thấy Document 'system_config' trong Collection 'artifacts'.");
             }
 
-            // --- BƯỚC QUAN TRỌNG: KEY DỰ PHÒNG (CỨU CÁNH) ---
-            // Nếu Firestore chưa có key hoặc key bị lỗi, dùng Key 5 xịn này
-            // (Đây là key bạn đã chụp ảnh chứng minh là hoạt động tốt)
-            const BACKUP_KEY = "AIzaSyCQ3Ex7OHVNwBhS5sDAqt-X8jc3n2TQTgA"; 
-            
-            // Chiến thuật: Thử Key Firestore trước -> Nếu lỗi 404 thì dùng Key Dự Phòng
-            const runAI = async (keyToUse) => {
-                // Danh sách model ưu tiên: Flash (Nhanh) -> 1.0-Pro (Ổn định)
-                const models = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro'];
-                
-                for (const model of models) {
-                    try {
-                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`;
-                        const res = await fetch(url, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ contents: [{ parts: [{ 
-                                text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương. Câu hỏi: ${text}`
-                            }] }] })
-                        });
-                        
-                        if (res.ok) return await res.json(); // Thành công!
-                    } catch (err) {}
-                }
-                throw new Error("Tất cả model đều lỗi");
-            };
+        } catch(e) {
+            // Hiển thị lỗi cuối cùng (chủ yếu là Rules nếu code này vẫn lỗi)
+            chatText.textContent = "Lỗi bảo mật: Kiểm tra lại Firebase Rules (artifacts/system_config).";
+            console.error("Lỗi lấy Key:", e);
+            setTimeout(() => bubble.classList.add('hidden'), 6000);
+            return;
+        }
+    }
+    GEMINI_API_KEY = _cachedGeminiKey;
 
-            try {
-                // Thử lần 1: Dùng Key từ Firestore
-                let data = null;
-                try {
-                    if (_cachedGeminiKey) data = await runAI(_cachedGeminiKey);
-                } catch (e) { console.log("Key Firestore bị lỗi, chuyển sang Key dự phòng..."); }
+    try {
+        // BƯỚC 1 & 2: GIỮ NGUYÊN LOGIC CŨ CỦA BẠN (Lấy danh sách và chọn model tốt nhất)
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+        const listRes = await fetch(listUrl);
+        const listData = await listRes.json();
+        
+        if (listData.error) throw new Error("Lỗi lấy danh sách: " + listData.error.message);
 
-                // Thử lần 2: Nếu lần 1 thất bại, dùng Key Dự Phòng (Chắc chắn được)
-                if (!data) data = await runAI(BACKUP_KEY);
+        let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+        if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+        if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+        
+        if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
 
-                // Xử lý kết quả
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
-                chatText.textContent = reply;
-                window.app.speak(reply);
-                
-                if(window.app.animatePetClick) window.app.animatePetClick();
-                setTimeout(() => bubble.classList.add('hidden'), 6000);
+        const modelName = model.name.replace('models/', '');
+        
+        // BƯỚC 3: GỬI TIN NHẮN
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ contents: [{ parts: [{ 
+                // Tối ưu hóa lại Prompt:
+                text: `Bạn là một chú ${currentUser?.pet?.type || 'thú cưng'} đáng yêu tên là "${currentUser?.pet?.name || 'Bé cưng'}". 
+                                Chủ nhân của bạn là "${currentUser?.name || 'bạn nhỏ'}". 
+                                Nhiệm vụ:
+                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
+                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và khen ngợi chủ nhân.
+                                4. Trả lời cực kỳ ngắn gọn, không bao giừo dùng icon. Câu hỏi: ${text}`
+                            }]
+                        }]
+                    })
+                });
+        
+        const data = await res.json();
+        
+        if(data.error) throw new Error(data.error.message);
+        
+        const reply = data.candidates[0].content.parts[0].text;
+        chatText.textContent = reply;
+        
+        // Đọc to & Hiệu ứng
+        window.app.speak(reply);
+        if(window.app.animatePetClick) window.app.animatePetClick();
+        setTimeout(() => bubble.classList.add('hidden'), 6000);
 
-            } catch(e) {
-                console.error("LỖI CUỐI CÙNG:", e);
-                chatText.textContent = "Hic, thú cưng đang ngủ... (Lỗi mạng)";
-                setTimeout(() => bubble.classList.add('hidden'), 5000);
-            }
-        },
+    } catch(e) {
+        console.error("Lỗi:", e);
+        chatText.textContent = "Lỗi: " + e.message;
+        setTimeout(() => bubble.classList.add('hidden'), 6000);
+    }
+}, // Dấu phẩy này là bắt buộc vì hàm speak theo sau
         
         speak: (text) => {
             // Ngắt lời cũ nếu đang nói
