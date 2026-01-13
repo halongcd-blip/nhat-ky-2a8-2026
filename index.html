@@ -1297,72 +1297,72 @@ let _cachedGeminiKey = null;
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // --- BƯỚC 1: LẤY KEY TỪ FIRESTORE (GIỮ NGUYÊN) ---
+            // --- BƯỚC 1: LẤY KEY TỪ FIRESTORE (GIỮ NGUYÊN CODE CŨ) ---
+            // Chúng ta vẫn lấy key từ hệ thống như bạn yêu cầu
             if (!_cachedGeminiKey) {
                 try {
                     const user = firebase.auth().currentUser;
-                    if (user) await user.getIdToken(false); // Xác thực nhẹ
+                    if (user) await user.getIdToken(false); 
 
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
                     if (keySnap.exists && keySnap.data().gemini) {
                         _cachedGeminiKey = keySnap.data().gemini; 
-                    } else {
-                        throw new Error("Chưa cấu hình Key.");
+                        console.log("Key lấy từ Firestore:", _cachedGeminiKey); // Xem key này là gì
                     }
                 } catch(e) {
                     console.error("Lỗi lấy Key:", e);
-                    chatText.textContent = "Lỗi kết nối máy chủ.";
-                    return;
                 }
             }
 
-            // --- BƯỚC 2: CHIẾN THUẬT "THỬ LẦN LƯỢT" (ĐỂ KHÔNG BAO GIỜ BỊ 404) ---
-            const modelsToTry = [
-                'gemini-1.5-flash',      // Ưu tiên 1: Nhanh nhất
-                'gemini-1.0-pro',        // Ưu tiên 2: Ổn định nhất (Key 6 thích cái này)
-                'gemini-pro'             // Ưu tiên 3: Bản cũ
-            ];
-
-            const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
+            // --- BƯỚC QUAN TRỌNG: KEY DỰ PHÒNG (CỨU CÁNH) ---
+            // Nếu Firestore chưa có key hoặc key bị lỗi, dùng Key 5 xịn này
+            // (Đây là key bạn đã chụp ảnh chứng minh là hoạt động tốt)
+            const BACKUP_KEY = "AIzaSyCQ3Ex7OHVNwBhS5sDAqt-X8jc3n2TQTgA"; 
             
-            let success = false;
-
-            // Vòng lặp thử từng model
-            for (const modelName of modelsToTry) {
-                try {
-                    console.log("Đang thử model:", modelName);
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${_cachedGeminiKey}`;
-                    
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
+            // Chiến thuật: Thử Key Firestore trước -> Nếu lỗi 404 thì dùng Key Dự Phòng
+            const runAI = async (keyToUse) => {
+                // Danh sách model ưu tiên: Flash (Nhanh) -> 1.0-Pro (Ổn định)
+                const models = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro'];
+                
+                for (const model of models) {
+                    try {
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`;
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ contents: [{ parts: [{ 
+                                text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương. Câu hỏi: ${text}`
+                            }] }] })
+                        });
                         
-                        chatText.textContent = reply;
-                        window.app.speak(reply);
-                        success = true;
-                        break; // Thành công rồi thì thoát vòng lặp ngay
-                    } else {
-                        console.warn(`Model ${modelName} bị lỗi ${res.status}, thử cái tiếp theo...`);
-                    }
-                } catch (err) {
-                    console.warn(`Lỗi kết nối với ${modelName}`, err);
+                        if (res.ok) return await res.json(); // Thành công!
+                    } catch (err) {}
                 }
-            }
+                throw new Error("Tất cả model đều lỗi");
+            };
 
-            // Nếu thử hết cả 3 cái mà vẫn không được
-            if (!success) {
-                chatText.textContent = "Lỗi: Key chặn web này hoặc hết hạn mức.";
-                setTimeout(() => bubble.classList.add('hidden'), 6000);
-            } else {
-                // Hiệu ứng nhảy nếu thành công
+            try {
+                // Thử lần 1: Dùng Key từ Firestore
+                let data = null;
+                try {
+                    if (_cachedGeminiKey) data = await runAI(_cachedGeminiKey);
+                } catch (e) { console.log("Key Firestore bị lỗi, chuyển sang Key dự phòng..."); }
+
+                // Thử lần 2: Nếu lần 1 thất bại, dùng Key Dự Phòng (Chắc chắn được)
+                if (!data) data = await runAI(BACKUP_KEY);
+
+                // Xử lý kết quả
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
+                chatText.textContent = reply;
+                window.app.speak(reply);
+                
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
+
+            } catch(e) {
+                console.error("LỖI CUỐI CÙNG:", e);
+                chatText.textContent = "Hic, thú cưng đang ngủ... (Lỗi mạng)";
+                setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
         
