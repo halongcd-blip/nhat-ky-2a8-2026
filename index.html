@@ -1293,98 +1293,85 @@ let _cachedGeminiKey = null;
             const chatText = document.getElementById('pet-chat-text');
             bubble.classList.remove('hidden');
             
-            // Hiệu ứng icon vui nhộn
             const thinkingIcons = ["🤔", "⚡", "💡", "gâu...", "meow...", "❤️"];
             const randIcon = thinkingIcons[Math.floor(Math.random() * thinkingIcons.length)];
             chatText.textContent = `Đang nghĩ... ${randIcon}`;
 
-            // --- [ĐÃ SỬA] BỎ QUA BƯỚC LÀM MỚI TOKEN (NGUYÊN NHÂN GÂY LỖI KẾT NỐI LẦN ĐẦU) ---
-            // Code cũ có đoạn await user.getIdToken(true); -> Đã xóa để chạy mượt mà.
-
             // =======================================================
-            // BƯỚC 1: LẤY API Key từ Firestore (GIỮ NGUYÊN NHƯ FILE CŨ)
+            // BƯỚC 1: LẤY KEY (SỬA LẠI: THÊM XÁC THỰC ĐỂ KHÔNG BỊ LỖI PERMISSION)
             // =======================================================
-            let GEMINI_API_KEY = null;
             if (!_cachedGeminiKey) {
                 try {
-                    // Gọi Firestore y hệt như file bạn gửi
-                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
-                    
-                    if (keySnap.exists) {
-                        _cachedGeminiKey = keySnap.data().gemini; 
-                        
-                        if (!_cachedGeminiKey) {
-                            throw new Error("Lỗi: Document 'system_config' đã có nhưng không tìm thấy trường 'gemini'.");
-                        }
-                    } else {
-                        throw new Error("Không tìm thấy Document 'system_config' trong Collection 'artifacts'.");
+                    // Lấy user hiện tại
+                    const user = firebase.auth().currentUser;
+                    if (user) {
+                        // [QUAN TRỌNG] Xác thực nhẹ để Firebase cho phép đọc dữ liệu
+                        // Dùng 'false' để lấy token từ bộ nhớ máy (Nhanh hơn tải từ mạng)
+                        await user.getIdToken(false);
                     }
 
+                    // Gọi Firestore (Giữ nguyên cách cũ của bạn)
+                    const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
+                    
+                    if (keySnap.exists && keySnap.data().gemini) {
+                        _cachedGeminiKey = keySnap.data().gemini; 
+                    } else {
+                        throw new Error("Chưa cấu hình Key trong hệ thống.");
+                    }
                 } catch(e) {
                     console.error("Lỗi lấy Key:", e);
-                    chatText.textContent = "Lỗi kết nối máy chủ (Lấy Key).";
-                    setTimeout(() => bubble.classList.add('hidden'), 6000);
+                    // Nếu lỗi quyền, thử đăng nhập lại ngầm
+                    if(e.code === 'permission-denied') {
+                         chatText.textContent = "Đang kết nối lại... thử bấm gửi lại nhé!";
+                         if(firebase.auth().currentUser) await firebase.auth().currentUser.getIdToken(true);
+                         return;
+                    }
+                    chatText.textContent = "Lỗi kết nối máy chủ.";
                     return;
                 }
             }
-            GEMINI_API_KEY = _cachedGeminiKey;
 
             // =======================================================
-            // BƯỚC 2: TÌM MODEL VÀ GỌI AI (GIỮ NGUYÊN LOGIC CŨ)
+            // BƯỚC 2: GỌI AI (ĐÃ TỐI ƯU TỐC ĐỘ, KHÔNG HỎI LIST MODEL NỮA)
             // =======================================================
             try {
-                // 1. Lấy danh sách model (Logic cũ của bạn - Không thay đổi)
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-                const listRes = await fetch(listUrl);
-                const listData = await listRes.json();
-                
-                if (listData.error) throw new Error("Lỗi lấy danh sách model: " + listData.error.message);
+                const prompt = `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ: Trả lời ngắn gọn (dưới 20 từ), dễ thương, hài hước. Câu hỏi: ${text}`;
 
-                // Logic tìm model ưu tiên Flash -> Pro -> Gemini (Giữ nguyên)
-                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
-                if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+                // Gọi thẳng Model Flash (Nhanh nhất)
+                let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${_cachedGeminiKey}`;
                 
-                if (!model) throw new Error("Không tìm thấy model nào khả dụng!");
-
-                const modelName = model.name.replace('models/', '');
-                
-                // 2. Gửi tin nhắn (Giữ nguyên Prompt và Cấu trúc)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-                
-                const res = await fetch(url, {
+                let res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ 
-                        text: `Bạn là một chú ${currentUser?.pet?.type || 'thú cưng'} đáng yêu tên là "${currentUser?.pet?.name || 'Bé cưng'}". 
-                                Chủ nhân của bạn là "${currentUser?.name || 'bạn nhỏ'}". 
-                                Nhiệm vụ:
-                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
-                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và khen ngợi chủ nhân.
-                                4. Trả lời cực kỳ ngắn gọn, không dùng icon. Câu hỏi: ${text}`
-                            }]
-                        }]
-                    })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
-                
+
+                // Nếu Flash lỗi, thử sang Pro
+                if (!res.ok) {
+                    console.warn("Flash lỗi, thử sang Pro...");
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${_cachedGeminiKey}`;
+                    res = await fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+                }
+
+                if (!res.ok) throw new Error("Mất kết nối với thú cưng");
+
                 const data = await res.json();
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gâu? (Em không hiểu)";
                 
-                if(data.error) throw new Error(data.error.message);
-                
-                const reply = data.candidates[0].content.parts[0].text;
-                
-                // Cập nhật giao diện
                 chatText.textContent = reply;
-                
-                // Đọc to & Hiệu ứng
                 window.app.speak(reply);
+                
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
-                console.error("Lỗi:", e);
-                chatText.textContent = "Lỗi: " + e.message;
-                setTimeout(() => bubble.classList.add('hidden'), 6000);
+                console.error("Lỗi AI:", e);
+                chatText.textContent = "Mạng lag quá ạ! 🌐";
+                setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
         
