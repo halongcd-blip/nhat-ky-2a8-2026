@@ -1385,7 +1385,10 @@ msgs.forEach(m => {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ 
-                        text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Trả lời cực ngắn, dễ thương. Câu hỏi: ${text}`
+                        text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ:
+                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
+                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
+                                4. Trả lời cực kỳ ngắn gọn, Không dùng icon. Câu hỏi: ${text}`
                     }] }] })
                 });
                 
@@ -1515,6 +1518,7 @@ msgs.forEach(m => {
 </body>
 
 </html>
+
 
 
 
