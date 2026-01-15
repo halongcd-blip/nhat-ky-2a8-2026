@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     <style>
 /* Hiệu ứng khung vàng lấp lánh */
 .frame-gold-sparkle {
@@ -743,6 +744,11 @@
                 </div>
             </div>
 
+
+
+
+
+
             <div id="admin-panel" class="hidden space-y-6">
                 <div class="bg-yellow-50 p-5 rounded-2xl shadow-sm border border-yellow-200">
                     <h3 class="font-bold text-yellow-800 mb-3"><i data-lucide="gift"></i> Tặng Điểm Thưởng (Xu)</h3>
@@ -781,24 +787,18 @@
                         </div>
                         <p id="settings-user-name" class="font-bold text-lg text-slate-800"></p>
                     </div>
-<div class="bg-red-50 p-6 rounded-2xl shadow-sm border-2 border-red-200 mt-6">
-                    <h3 class="font-bold text-red-800 mb-2 flex items-center gap-2">
-                        <i data-lucide="alert-triangle"></i> VÙNG NGUY HIỂM: KẾT THÚC NĂM HỌC
-                    </h3>
-                    <p class="text-sm text-red-600 mb-4 text-justify">
-                        Chức năng này dùng để <b>XÓA SẠCH 100% DỮ LIỆU</b> của lớp hiện tại (Bài viết, Chat, Thú cưng, Cây biết ơn, Điểm thi...) và <b>XÓA TẤT CẢ TÀI KHOẢN HỌC SINH</b>. <br>
-                        Chỉ giữ lại duy nhất tài khoản Admin. Dùng khi bắt đầu lớp mới.
-                    </p>
-                    <button id="btn-reset-class" onclick="window.app.resetClassData()" class="w-full py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition shadow-lg flex justify-center items-center gap-2">
-                        <i data-lucide="trash-2"></i> XÓA TOÀN BỘ LỚP HỌC
-                    </button>
-                
                 </div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-cyan-100">
                     <h3 class="font-bold text-cyan-800 mb-3 flex items-center gap-2"><i data-lucide="lock"></i> Đổi Mật Khẩu</h3>
                     <input id="new-password" type="password" class="w-full p-3 mb-2 rounded-xl border bg-gray-50 text-sm" placeholder="Mật khẩu mới">
                     <input id="confirm-password" type="password" class="w-full p-3 mb-3 rounded-xl border bg-gray-50 text-sm" placeholder="Nhập lại mật khẩu mới">
                     <button onclick="app.changePassword()" id="btn-change-pass" class="w-full py-3 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-700 transition">Lưu Mật Khẩu</button>
+                <div class="mt-8 pt-6 border-t-2 border-red-100 text-center">
+                    <p class="text-xs text-red-500 mb-2 font-bold uppercase tracking-widest">Khu vực nguy hiểm</p>
+                    <button id="btn-reset-web" onclick="window.app.resetClassData()" class="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition flex justify-center items-center gap-2">
+                        <i data-lucide="trash-2"></i> XÓA TOÀN BỘ DỮ LIỆU & LÀM MỚI WEB
+                    </button>
+                    <p class="text-[10px] text-gray-400 mt-2 italic">Dùng khi kết thúc năm học. Xóa sạch bài viết, ảnh, học sinh. Giữ lại Admin.</p>
                 </div>
             </div>
 
@@ -845,8 +845,7 @@
 
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
     import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, setDoc, getDoc, limit, startAfter, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-    // TÌM DÒNG NÀY VÀ THAY THẾ:
-    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, listAll, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyBNemOkL1Y3p2CSH8dw3zfq1vFe9XXNDTM",
@@ -1137,79 +1136,86 @@ let _cachedGeminiKey = null;
                 lucide.createIcons();
             });
         },
-
-        // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
-
-// --- CHỨC NĂNG RESET TOÀN BỘ LỚP HỌC (ĐÃ SỬA LỖI) ---
+// --- CHỨC NĂNG XÓA WEB (CHUẨN COMPAT) ---
         resetClassData: async () => {
-            if (!confirm("⚠️ CẢNH BÁO: Bạn đang sắp XÓA VĨNH VIỄN toàn bộ dữ liệu lớp học?\n(Bao gồm cả Bài viết, Tin nhắn và TẤT CẢ HÌNH ẢNH đã tải lên).\n\nHành động này giúp giải phóng dung lượng nhưng KHÔNG THỂ KHÔI PHỤC.\nBạn có chắc chắn không?")) return;
+            // 1. Cảnh báo an toàn
+            if (!confirm("⚠️ CẢNH BÁO: Bạn đang yêu cầu XÓA SẠCH 100% dữ liệu lớp học?\n(Bao gồm toàn bộ Ảnh, Bài viết, Chat, và Tài khoản Học sinh).\n\nHành động này ĐỂ CHUẨN BỊ CHO LỚP MỚI và KHÔNG THỂ KHÔI PHỤC.\n\nBạn có chắc chắn không?")) return;
 
-            const pass = prompt("⛔ NHẬP MẬT KHẨU ADMIN ĐỂ XÁC NHẬN XÓA:");
+            // 2. Kiểm tra mật khẩu Admin
+            const pass = prompt("⛔ ĐỂ XÁC NHẬN, HÃY NHẬP MẬT KHẨU ADMIN:");
             if (!pass) return;
             if (pass !== currentUser.password) {
-                alert("❌ Sai mật khẩu!");
+                alert("❌ Sai mật khẩu Admin! Đã hủy thao tác.");
                 return;
             }
 
-            const btn = document.getElementById('btn-reset-class');
-            btn.innerHTML = '<div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> Đang xóa Ảnh & Dữ liệu...';
+            const btn = document.getElementById('btn-reset-web');
+            const oldText = btn.innerHTML;
+            btn.innerHTML = '⏳ Đang xóa dữ liệu...';
             btn.disabled = true;
 
             try {
-                // 1. XÓA ẢNH (STORAGE)
-                const storage = getStorage();
-                const storageFolders = ['avatars', 'banner', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_stars'];
-                
-                const deleteFolderPromises = storageFolders.map(async (folderName) => {
-                    const folderRef = storageRef(storage, `artifacts/${appId}/${folderName}`);
-                    try {
-                        const res = await listAll(folderRef);
-                        const deleteFilePromises = res.items.map(itemRef => deleteObject(itemRef));
-                        await Promise.all(deleteFilePromises);
-                    } catch (err) {
-                        // Bỏ qua nếu thư mục rỗng
-                    }
-                });
-                await Promise.all(deleteFolderPromises);
+                const db = firebase.firestore();
+                const storage = firebase.storage();
 
-                // 2. XÓA DỮ LIỆU (FIRESTORE)
+                // DANH SÁCH CẦN XÓA
+                // Các thư mục ảnh (Storage)
+                const storageFolders = ['avatars', 'banner', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_stars', 'posts_private'];
+                // Các bảng dữ liệu (Firestore)
                 const dbCollections = ['chat', 'gratitude_tree', 'quiz_results', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private'];
-                
-                for (const colName of dbCollections) {
-                    const q = query(collection(db, `artifacts/${appId}/${colName}`));
-                    const snap = await getDocs(q);
-                    const batchPromises = snap.docs.map(d => deleteDoc(d.ref));
+
+                // A. XÓA ẢNH TRÊN STORAGE (Để giải phóng dung lượng)
+                for (const folder of storageFolders) {
+                    const folderRef = storage.ref().child(`artifacts/${appId}/${folder}`);
+                    try {
+                        const res = await folderRef.listAll();
+                        // Xóa từng file ảnh
+                        await Promise.all(res.items.map(item => item.delete()));
+                    } catch (err) { /* Bỏ qua nếu thư mục trống */ }
+                }
+
+                // B. XÓA DỮ LIỆU TRÊN DATABASE
+                for (const col of dbCollections) {
+                    const q = db.collection(`artifacts/${appId}/${col}`);
+                    const snap = await q.get();
+                    // Xóa từng dòng dữ liệu
+                    const batchPromises = snap.docs.map(doc => doc.ref.delete());
                     await Promise.all(batchPromises);
                 }
 
-                // 3. RESET CẤU HÌNH & USER (Sửa lại các biến doc() cho đúng với file của bạn)
-                await setDoc(doc(db, 'artifacts', appId, 'quiz', 'data'), { list: [] });
-                await setDoc(doc(db, 'artifacts', appId, 'quiz', 'global_state'), { status: 'waiting' });
-                await setDoc(doc(db, 'artifacts', appId, 'config', 'main'), { bannerUrl: null }, { merge: true });
+                // C. RESET CẤU HÌNH (Về mặc định)
+                await db.doc(`artifacts/${appId}/quiz/data`).set({ list: [] });
+                await db.doc(`artifacts/${appId}/quiz/global_state`).set({ status: 'waiting' });
+                await db.doc(`artifacts/${appId}/config/main`).set({ bannerUrl: null }, { merge: true });
 
-                const userQ = query(collection(db, `artifacts/${appId}/users`));
-                const userSnap = await getDocs(userQ);
+                // D. XÓA TÀI KHOẢN HỌC SINH (Giữ lại Admin)
+                const usersSnap = await db.collection(`artifacts/${appId}/users`).get();
                 const userPromises = [];
-                userSnap.forEach(d => {
-                    if (d.id !== 'admin' && d.id !== currentUser.id) {
-                        userPromises.push(deleteDoc(d.ref));
+                usersSnap.forEach(doc => {
+                    if (doc.id !== 'admin' && doc.id !== currentUser.id) {
+                        userPromises.push(doc.ref.delete()); // Xóa học sinh
                     } else {
-                        // Reset Admin
-                        userPromises.push(updateDoc(d.ref, { coins: 0, inventory: [], frame: null, pet: null, lastCheckIn: null, avatarUrl: '' }));
+                        // Reset Admin về 0
+                        userPromises.push(doc.ref.update({ 
+                            coins: 0, inventory: [], frame: null, pet: null, 
+                            lastCheckIn: null, avatarUrl: '' 
+                        }));
                     }
                 });
                 await Promise.all(userPromises);
 
-                alert("✅ HOÀN TẤT!\n\nĐã xóa sạch dữ liệu và hình ảnh. Lớp học đã mới tinh.");
-                location.reload();
+                alert("✅ THÀNH CÔNG!\nWeb đã được dọn sạch sẽ. Sẵn sàng đón học sinh mới.");
+                window.location.reload();
 
             } catch (e) {
                 console.error(e);
                 alert("❌ Lỗi: " + e.message);
-                btn.innerHTML = 'Thử Lại';
+                btn.innerHTML = oldText;
                 btn.disabled = false;
             }
-        },
+        }, 
+        // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC ĐỂ NỐI VỚI HÀM LOGIN BÊN DƯỚI ^^^
+        // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
         login: async () => { const u = document.getElementById('username').value.trim(); const p = document.getElementById('password').value.trim(); const err = document.getElementById('login-error'); if(!u || !p) return; try { if (!auth.currentUser) await signInAnonymously(auth); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', u)); const snap = await getDocs(q); if (!snap.empty) { const d = snap.docs[0].data(); if (d.password === p) { currentUser = { id: snap.docs[0].id, ...d }; window.app.onLoginSuccess(); } else { err.textContent = "Sai mật khẩu!"; err.classList.remove('hidden'); } } else { if(u === 'admin' && p === 'admin') { const adminRef = doc(db, `artifacts/${appId}/users`, 'admin'); const adminSnap = await getDoc(adminRef); let adminData = { username: 'admin', password: 'admin', name: 'Cô Giáo', role: 'admin', dob: '' }; if(adminSnap.exists()) { adminData = { ...adminData, ...adminSnap.data() }; } else { adminData.avatarUrl = ''; } await setDoc(adminRef, adminData, {merge:true}); currentUser = { id: 'admin', ...adminData }; window.app.onLoginSuccess(); } else { err.textContent = "Không tìm thấy tài khoản!"; err.classList.remove('hidden'); } } } catch(e) { err.textContent = "Lỗi kết nối: " + e.message; err.classList.remove('hidden'); } },
         onLoginSuccess: () => { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('login-view').classList.remove('active-flex'); document.getElementById('dashboard-view').classList.add('active-block'); document.getElementById('user-name').textContent = currentUser.name; document.getElementById('admin-card').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('btn-clear-chat').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('user-balance-display').classList.remove('hidden'); document.getElementById('current-coins').textContent = currentUser.coins || 0; window.app.loadBanner(); window.app.loadChat(); window.app.checkCheckInStatus(); window.app.checkNotifications(); window.app.reportOnline(); setInterval(window.app.reportOnline, 30000); },
         logout: () => { if(confirm("Đăng xuất?")) { localStorage.removeItem(USER_STORAGE_KEY); location.reload(); } },
