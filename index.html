@@ -781,6 +781,18 @@
                         </div>
                         <p id="settings-user-name" class="font-bold text-lg text-slate-800"></p>
                     </div>
+<div class="bg-red-50 p-6 rounded-2xl shadow-sm border-2 border-red-200 mt-6">
+                    <h3 class="font-bold text-red-800 mb-2 flex items-center gap-2">
+                        <i data-lucide="alert-triangle"></i> VÙNG NGUY HIỂM: KẾT THÚC NĂM HỌC
+                    </h3>
+                    <p class="text-sm text-red-600 mb-4 text-justify">
+                        Chức năng này dùng để <b>XÓA SẠCH 100% DỮ LIỆU</b> của lớp hiện tại (Bài viết, Chat, Thú cưng, Cây biết ơn, Điểm thi...) và <b>XÓA TẤT CẢ TÀI KHOẢN HỌC SINH</b>. <br>
+                        Chỉ giữ lại duy nhất tài khoản Admin. Dùng khi bắt đầu lớp mới.
+                    </p>
+                    <button id="btn-reset-class" onclick="window.app.resetClassData()" class="w-full py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition shadow-lg flex justify-center items-center gap-2">
+                        <i data-lucide="trash-2"></i> XÓA TOÀN BỘ LỚP HỌC
+                    </button>
+                
                 </div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-cyan-100">
                     <h3 class="font-bold text-cyan-800 mb-3 flex items-center gap-2"><i data-lucide="lock"></i> Đổi Mật Khẩu</h3>
@@ -1126,6 +1138,80 @@ let _cachedGeminiKey = null;
         },
 
         // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
+
+// --- CHỨC NĂNG RESET TOÀN BỘ LỚP HỌC (DÀNH CHO ADMIN) ---
+        resetClassData: async () => {
+            // 1. Cảnh báo lần 1
+            if (!confirm("⚠️ CẢNH BÁO CỰC MẠNH ⚠️\n\nBạn đang chuẩn bị XÓA SẠCH TOÀN BỘ dữ liệu của lớp học này?\n- Mất hết bài viết, ảnh, chat.\n- Mất hết tài khoản học sinh.\n- Không thể khôi phục lại được!\n\nBạn có chắc chắn muốn tiếp tục không?")) return;
+
+            // 2. Cảnh báo lần 2 & Xác thực mật khẩu
+            const pass = prompt("⛔ CHỐT CHẶN CUỐI CÙNG:\n\nĐể đảm bảo bạn là Admin và thực sự muốn xóa, hãy nhập MẬT KHẨU ADMIN vào bên dưới:");
+            
+            if (!pass) return;
+            if (pass !== currentUser.password) {
+                alert("❌ Sai mật khẩu! Đã hủy thao tác xóa.");
+                return;
+            }
+
+            const btn = document.getElementById('btn-reset-class');
+            btn.innerHTML = '<div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> Đang dọn dẹp dữ liệu... (Không được tắt tab)';
+            btn.disabled = true;
+
+            try {
+                // DANH SÁCH CÁC BỘ SƯU TẬP CẦN XÓA
+                const collections = [
+                    'chat', 
+                    'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private',
+                    'gratitude_tree', 
+                    'quiz_results'
+                ];
+
+                // 3. Xóa các bài viết, chat, cây biết ơn...
+                for (const colName of collections) {
+                    const q = query(collection(db, `artifacts/${appId}/${colName}`));
+                    const snap = await getDocs(q);
+                    const batchPromises = snap.docs.map(d => deleteDoc(d.ref));
+                    await Promise.all(batchPromises); // Xóa song song cho nhanh
+                }
+
+                // 4. Reset dữ liệu trắc nghiệm & Cấu hình
+                await setDoc(QUIZ_DATA_DOC(db), { list: [] }); // Xóa bộ câu hỏi
+                await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'waiting' }); // Reset trạng thái thi
+                // Xóa Banner lớp (Reset về mặc định)
+                await setDoc(APP_CONFIG_DOC(db), { [BANNER_KEY]: null }, { merge: true });
+
+                // 5. QUAN TRỌNG NHẤT: Xóa User (Trừ Admin)
+                const userQ = query(collection(db, `artifacts/${appId}/users`));
+                const userSnap = await getDocs(userQ);
+                
+                const userPromises = [];
+                userSnap.forEach(d => {
+                    // Nếu ID không phải là admin thì xóa thẳng tay
+                    if (d.id !== 'admin' && d.id !== currentUser.id) {
+                        userPromises.push(deleteDoc(d.ref));
+                    } else {
+                        // Nếu là Admin, reset lại các chỉ số phụ (để năm sau dùng tiếp)
+                        userPromises.push(updateDoc(d.ref, {
+                            coins: 0, 
+                            inventory: [], 
+                            frame: null,
+                            pet: null,
+                            lastCheckIn: null
+                        }));
+                    }
+                });
+                await Promise.all(userPromises);
+
+                alert("✅ ĐÃ XONG!\n\nToàn bộ lớp học đã được đưa về trạng thái mới tinh.\nSẵn sàng cho năm học mới!");
+                location.reload(); // Tải lại trang
+
+            } catch (e) {
+                console.error(e);
+                alert("❌ Có lỗi xảy ra trong quá trình xóa: " + e.message);
+                btn.innerHTML = 'Thử Lại';
+                btn.disabled = false;
+            }
+        },
         login: async () => { const u = document.getElementById('username').value.trim(); const p = document.getElementById('password').value.trim(); const err = document.getElementById('login-error'); if(!u || !p) return; try { if (!auth.currentUser) await signInAnonymously(auth); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', u)); const snap = await getDocs(q); if (!snap.empty) { const d = snap.docs[0].data(); if (d.password === p) { currentUser = { id: snap.docs[0].id, ...d }; window.app.onLoginSuccess(); } else { err.textContent = "Sai mật khẩu!"; err.classList.remove('hidden'); } } else { if(u === 'admin' && p === 'admin') { const adminRef = doc(db, `artifacts/${appId}/users`, 'admin'); const adminSnap = await getDoc(adminRef); let adminData = { username: 'admin', password: 'admin', name: 'Cô Giáo', role: 'admin', dob: '' }; if(adminSnap.exists()) { adminData = { ...adminData, ...adminSnap.data() }; } else { adminData.avatarUrl = ''; } await setDoc(adminRef, adminData, {merge:true}); currentUser = { id: 'admin', ...adminData }; window.app.onLoginSuccess(); } else { err.textContent = "Không tìm thấy tài khoản!"; err.classList.remove('hidden'); } } } catch(e) { err.textContent = "Lỗi kết nối: " + e.message; err.classList.remove('hidden'); } },
         onLoginSuccess: () => { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('login-view').classList.remove('active-flex'); document.getElementById('dashboard-view').classList.add('active-block'); document.getElementById('user-name').textContent = currentUser.name; document.getElementById('admin-card').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('btn-clear-chat').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('user-balance-display').classList.remove('hidden'); document.getElementById('current-coins').textContent = currentUser.coins || 0; window.app.loadBanner(); window.app.loadChat(); window.app.checkCheckInStatus(); window.app.checkNotifications(); window.app.reportOnline(); setInterval(window.app.reportOnline, 30000); },
         logout: () => { if(confirm("Đăng xuất?")) { localStorage.removeItem(USER_STORAGE_KEY); location.reload(); } },
@@ -1590,6 +1676,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
