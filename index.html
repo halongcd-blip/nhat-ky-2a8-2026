@@ -799,6 +799,7 @@
                         <i data-lucide="trash-2"></i> XÓA TOÀN BỘ DỮ LIỆU & LÀM MỚI WEB
                     </button>
                     <p class="text-[10px] text-gray-400 mt-2 italic">Dùng khi kết thúc năm học. Xóa sạch bài viết, ảnh, học sinh. Giữ lại Admin.</p>
+</div>
                 </div>
             </div>
 
@@ -1136,84 +1137,7 @@ let _cachedGeminiKey = null;
                 lucide.createIcons();
             });
         },
-// --- CHỨC NĂNG XÓA WEB (CHUẨN COMPAT) ---
-        resetClassData: async () => {
-            // 1. Cảnh báo an toàn
-            if (!confirm("⚠️ CẢNH BÁO: Bạn đang yêu cầu XÓA SẠCH 100% dữ liệu lớp học?\n(Bao gồm toàn bộ Ảnh, Bài viết, Chat, và Tài khoản Học sinh).\n\nHành động này ĐỂ CHUẨN BỊ CHO LỚP MỚI và KHÔNG THỂ KHÔI PHỤC.\n\nBạn có chắc chắn không?")) return;
 
-            // 2. Kiểm tra mật khẩu Admin
-            const pass = prompt("⛔ ĐỂ XÁC NHẬN, HÃY NHẬP MẬT KHẨU ADMIN:");
-            if (!pass) return;
-            if (pass !== currentUser.password) {
-                alert("❌ Sai mật khẩu Admin! Đã hủy thao tác.");
-                return;
-            }
-
-            const btn = document.getElementById('btn-reset-web');
-            const oldText = btn.innerHTML;
-            btn.innerHTML = '⏳ Đang xóa dữ liệu...';
-            btn.disabled = true;
-
-            try {
-                const db = firebase.firestore();
-                const storage = firebase.storage();
-
-                // DANH SÁCH CẦN XÓA
-                // Các thư mục ảnh (Storage)
-                const storageFolders = ['avatars', 'banner', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_stars', 'posts_private'];
-                // Các bảng dữ liệu (Firestore)
-                const dbCollections = ['chat', 'gratitude_tree', 'quiz_results', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private'];
-
-                // A. XÓA ẢNH TRÊN STORAGE (Để giải phóng dung lượng)
-                for (const folder of storageFolders) {
-                    const folderRef = storage.ref().child(`artifacts/${appId}/${folder}`);
-                    try {
-                        const res = await folderRef.listAll();
-                        // Xóa từng file ảnh
-                        await Promise.all(res.items.map(item => item.delete()));
-                    } catch (err) { /* Bỏ qua nếu thư mục trống */ }
-                }
-
-                // B. XÓA DỮ LIỆU TRÊN DATABASE
-                for (const col of dbCollections) {
-                    const q = db.collection(`artifacts/${appId}/${col}`);
-                    const snap = await q.get();
-                    // Xóa từng dòng dữ liệu
-                    const batchPromises = snap.docs.map(doc => doc.ref.delete());
-                    await Promise.all(batchPromises);
-                }
-
-                // C. RESET CẤU HÌNH (Về mặc định)
-                await db.doc(`artifacts/${appId}/quiz/data`).set({ list: [] });
-                await db.doc(`artifacts/${appId}/quiz/global_state`).set({ status: 'waiting' });
-                await db.doc(`artifacts/${appId}/config/main`).set({ bannerUrl: null }, { merge: true });
-
-                // D. XÓA TÀI KHOẢN HỌC SINH (Giữ lại Admin)
-                const usersSnap = await db.collection(`artifacts/${appId}/users`).get();
-                const userPromises = [];
-                usersSnap.forEach(doc => {
-                    if (doc.id !== 'admin' && doc.id !== currentUser.id) {
-                        userPromises.push(doc.ref.delete()); // Xóa học sinh
-                    } else {
-                        // Reset Admin về 0
-                        userPromises.push(doc.ref.update({ 
-                            coins: 0, inventory: [], frame: null, pet: null, 
-                            lastCheckIn: null, avatarUrl: '' 
-                        }));
-                    }
-                });
-                await Promise.all(userPromises);
-
-                alert("✅ THÀNH CÔNG!\nWeb đã được dọn sạch sẽ. Sẵn sàng đón học sinh mới.");
-                window.location.reload();
-
-            } catch (e) {
-                console.error(e);
-                alert("❌ Lỗi: " + e.message);
-                btn.innerHTML = oldText;
-                btn.disabled = false;
-            }
-        }, 
         // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC ĐỂ NỐI VỚI HÀM LOGIN BÊN DƯỚI ^^^
         // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
         login: async () => { const u = document.getElementById('username').value.trim(); const p = document.getElementById('password').value.trim(); const err = document.getElementById('login-error'); if(!u || !p) return; try { if (!auth.currentUser) await signInAnonymously(auth); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', u)); const snap = await getDocs(q); if (!snap.empty) { const d = snap.docs[0].data(); if (d.password === p) { currentUser = { id: snap.docs[0].id, ...d }; window.app.onLoginSuccess(); } else { err.textContent = "Sai mật khẩu!"; err.classList.remove('hidden'); } } else { if(u === 'admin' && p === 'admin') { const adminRef = doc(db, `artifacts/${appId}/users`, 'admin'); const adminSnap = await getDoc(adminRef); let adminData = { username: 'admin', password: 'admin', name: 'Cô Giáo', role: 'admin', dob: '' }; if(adminSnap.exists()) { adminData = { ...adminData, ...adminSnap.data() }; } else { adminData.avatarUrl = ''; } await setDoc(adminRef, adminData, {merge:true}); currentUser = { id: 'admin', ...adminData }; window.app.onLoginSuccess(); } else { err.textContent = "Không tìm thấy tài khoản!"; err.classList.remove('hidden'); } } } catch(e) { err.textContent = "Lỗi kết nối: " + e.message; err.classList.remove('hidden'); } },
