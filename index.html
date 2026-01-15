@@ -1179,8 +1179,8 @@ msgs.forEach(m => {
         confirmPetSelection: async () => { const petName = document.getElementById('pet-name-input').value.trim(); const prices = { 'dog': 100, 'cat': 150, 'bunny': 200 }; if (!selectedTempPet) return alert("Vui lòng chọn 1 con vật!"); if (!petName) return alert("Đặt tên cho bé nhé!"); if (currentUser.coins < prices[selectedTempPet]) return alert(`Bạn cần ${prices[selectedTempPet]} Xu để nhận nuôi bé này!`); if(confirm(`Bạn có chắc muốn nhận nuôi với giá ${prices[selectedTempPet]} Xu?`)) { try { const petData = { type: selectedTempPet, name: petName, level: 1, exp: 0, hunger: 100, fun: 100, hygiene: 100, lastInteraction: Date.now(), accessory: null }; await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: petData, coins: increment(-prices[selectedTempPet]) }); alert("Chúc mừng bạn đã nhận nuôi thú cưng!"); window.app.renderPetGame(); } catch(e) { alert("Lỗi: " + e.message); } } },
 
 
-        checkPetStatus: async () => { if(!currentUser.pet) { window.app.renderPetGame(); return; } const p = currentUser.pet; if (isNaN(p.hunger)) p.hunger = 100; if (isNaN(p.fun)) p.fun = 100; if (isNaN(p.hygiene)) p.hygiene = 100; if(p.isDead) { window.app.renderPetGame(); return; } const now = Date.now(); if (!p.lastInteraction) p.lastInteraction = now; const hoursPassed = (now - p.lastInteraction) / (1000 * 60 * 60); 
- const reduction = Math.floor(hoursPassed * 20);
+        checkPetStatus: async () => { if(!currentUser.pet) { window.app.renderPetGame(); return; } const p = currentUser.pet; if (isNaN(p.hunger)) p.hunger = 100; if (isNaN(p.fun)) p.fun = 100; if (isNaN(p.hygiene)) p.hygiene = 100; if(p.isDead) { window.app.renderPetGame(); return; } const now = Date.now(); if (!p.lastInteraction) p.lastInteraction = now; const hoursPassed = (now - p.lastInteraction) / (1000 * 60 * 60); if (hoursPassed >= 1) {
+ const reduction = Math.floor(hoursPassed * 1);
 if(reduction > 0) { let newHunger = Math.max(0, p.hunger - reduction); let newFun = Math.max(0, p.fun - reduction); let newHygiene = Math.max(0, p.hygiene - reduction); let isDead = false; if(newHunger <= 0) { const daysStarving = hoursPassed / 24; if (daysStarving >= 5) isDead = true; } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { "pet.hunger": newHunger, "pet.fun": newFun, "pet.hygiene": newHygiene, "pet.isDead": isDead, "pet.lastInteraction": now }); } } window.app.renderPetGame(); },
 
 
@@ -1532,7 +1532,6 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
-
 
 
 
