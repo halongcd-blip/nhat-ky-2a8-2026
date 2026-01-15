@@ -845,7 +845,8 @@
 
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
     import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, setDoc, getDoc, limit, startAfter, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+    // TÌM DÒNG NÀY VÀ THAY THẾ:
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, listAll, deleteObject } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyBNemOkL1Y3p2CSH8dw3zfq1vFe9XXNDTM",
@@ -1139,75 +1140,88 @@ let _cachedGeminiKey = null;
 
         // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
 
-// --- CHỨC NĂNG RESET TOÀN BỘ LỚP HỌC (DÀNH CHO ADMIN) ---
+// --- CHỨC NĂNG RESET TOÀN BỘ LỚP HỌC (PHIÊN BẢN XÓA CẢ ẢNH) ---
         resetClassData: async () => {
-            // 1. Cảnh báo lần 1
-            if (!confirm("⚠️ CẢNH BÁO CỰC MẠNH ⚠️\n\nBạn đang chuẩn bị XÓA SẠCH TOÀN BỘ dữ liệu của lớp học này?\n- Mất hết bài viết, ảnh, chat.\n- Mất hết tài khoản học sinh.\n- Không thể khôi phục lại được!\n\nBạn có chắc chắn muốn tiếp tục không?")) return;
+            if (!confirm("⚠️ CẢNH BÁO: Bạn đang sắp XÓA VĨNH VIỄN toàn bộ dữ liệu lớp học?\n(Bao gồm cả Bài viết, Tin nhắn và TẤT CẢ HÌNH ẢNH đã tải lên).\n\nHành động này giúp giải phóng dung lượng nhưng KHÔNG THỂ KHÔI PHỤC.\nBạn có chắc chắn không?")) return;
 
-            // 2. Cảnh báo lần 2 & Xác thực mật khẩu
-            const pass = prompt("⛔ CHỐT CHẶN CUỐI CÙNG:\n\nĐể đảm bảo bạn là Admin và thực sự muốn xóa, hãy nhập MẬT KHẨU ADMIN vào bên dưới:");
-            
+            const pass = prompt("⛔ NHẬP MẬT KHẨU ADMIN ĐỂ XÁC NHẬN XÓA:");
             if (!pass) return;
             if (pass !== currentUser.password) {
-                alert("❌ Sai mật khẩu! Đã hủy thao tác xóa.");
+                alert("❌ Sai mật khẩu!");
                 return;
             }
 
             const btn = document.getElementById('btn-reset-class');
-            btn.innerHTML = '<div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> Đang dọn dẹp dữ liệu... (Không được tắt tab)';
+            btn.innerHTML = '<div class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> Đang xóa Ảnh & Dữ liệu...';
             btn.disabled = true;
 
             try {
-                // DANH SÁCH CÁC BỘ SƯU TẬP CẦN XÓA
-                const collections = [
-                    'chat', 
-                    'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private',
-                    'gratitude_tree', 
-                    'quiz_results'
+                // 1. DANH SÁCH CÁC MỤC TRONG FIRESTORE (DATABASE) CẦN XÓA
+                const dbCollections = [
+                    'chat', 'gratitude_tree', 'quiz_results',
+                    'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private'
                 ];
 
-                // 3. Xóa các bài viết, chat, cây biết ơn...
-                for (const colName of collections) {
+                // 2. DANH SÁCH CÁC THƯ MỤC TRONG STORAGE (ẢNH) CẦN XÓA
+                const storageFolders = [
+                    'avatars',          // Ảnh đại diện
+                    'banner',           // Ảnh bìa
+                    'posts_diary',      // Ảnh nhật ký
+                    'posts_pets',       // Ảnh thú cưng
+                    'posts_chat',       // Ảnh hỏi đáp
+                    'posts_stars',      // Ảnh vinh danh
+                    // Các mục khác nếu có...
+                ];
+
+                // --- GIAI ĐOẠN 1: XÓA ẢNH TRONG STORAGE (ĐỂ TIẾT KIỆM TIỀN) ---
+                const storage = getStorage();
+                const deleteFolderPromises = storageFolders.map(async (folderName) => {
+                    const folderRef = storageRef(storage, `artifacts/${appId}/${folderName}`);
+                    try {
+                        // Liệt kê tất cả file trong thư mục
+                        const res = await listAll(folderRef);
+                        // Xóa từng file một
+                        const deleteFilePromises = res.items.map(itemRef => deleteObject(itemRef));
+                        await Promise.all(deleteFilePromises);
+                    } catch (err) {
+                        // Nếu thư mục rỗng hoặc không tồn tại thì bỏ qua, không báo lỗi
+                        console.log(`Thư mục ${folderName} đã trống hoặc không tồn tại.`);
+                    }
+                });
+                await Promise.all(deleteFolderPromises);
+
+                // --- GIAI ĐOẠN 2: XÓA CHỮ TRONG FIRESTORE ---
+                for (const colName of dbCollections) {
                     const q = query(collection(db, `artifacts/${appId}/${colName}`));
                     const snap = await getDocs(q);
                     const batchPromises = snap.docs.map(d => deleteDoc(d.ref));
-                    await Promise.all(batchPromises); // Xóa song song cho nhanh
+                    await Promise.all(batchPromises);
                 }
 
-                // 4. Reset dữ liệu trắc nghiệm & Cấu hình
-                await setDoc(QUIZ_DATA_DOC(db), { list: [] }); // Xóa bộ câu hỏi
-                await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'waiting' }); // Reset trạng thái thi
-                // Xóa Banner lớp (Reset về mặc định)
+                // --- GIAI ĐOẠN 3: RESET CẤU HÌNH & USER ---
+                await setDoc(QUIZ_DATA_DOC(db), { list: [] });
+                await setDoc(QUIZ_GLOBAL_DOC(db), { status: 'waiting' });
                 await setDoc(APP_CONFIG_DOC(db), { [BANNER_KEY]: null }, { merge: true });
 
-                // 5. QUAN TRỌNG NHẤT: Xóa User (Trừ Admin)
                 const userQ = query(collection(db, `artifacts/${appId}/users`));
                 const userSnap = await getDocs(userQ);
-                
                 const userPromises = [];
                 userSnap.forEach(d => {
-                    // Nếu ID không phải là admin thì xóa thẳng tay
                     if (d.id !== 'admin' && d.id !== currentUser.id) {
-                        userPromises.push(deleteDoc(d.ref));
+                        userPromises.push(deleteDoc(d.ref)); // Xóa học sinh
                     } else {
-                        // Nếu là Admin, reset lại các chỉ số phụ (để năm sau dùng tiếp)
-                        userPromises.push(updateDoc(d.ref, {
-                            coins: 0, 
-                            inventory: [], 
-                            frame: null,
-                            pet: null,
-                            lastCheckIn: null
-                        }));
+                        // Reset Admin
+                        userPromises.push(updateDoc(d.ref, { coins: 0, inventory: [], frame: null, pet: null, lastCheckIn: null, avatarUrl: '' }));
                     }
                 });
                 await Promise.all(userPromises);
 
-                alert("✅ ĐÃ XONG!\n\nToàn bộ lớp học đã được đưa về trạng thái mới tinh.\nSẵn sàng cho năm học mới!");
-                location.reload(); // Tải lại trang
+                alert("✅ HOÀN TẤT!\n\nĐã xóa sạch Bài viết, Tin nhắn và 100% HÌNH ẢNH.\nDung lượng Firebase của bạn đã được giải phóng.");
+                location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("❌ Có lỗi xảy ra trong quá trình xóa: " + e.message);
+                alert("❌ Lỗi: " + e.message);
                 btn.innerHTML = 'Thử Lại';
                 btn.disabled = false;
             }
