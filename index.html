@@ -926,7 +926,44 @@ firebase.initializeApp(firebaseConfig);
     const applySeasonalTheme = () => { const today = new Date(); const month = today.getMonth() + 1; const day = today.getDate(); const body = document.body; let icon = ''; let color = ''; let themeClass = ''; let greeting = ''; if (month === 12 && day <= 30) { themeClass = 'theme-xmas'; icon = '❄️'; color = '#fff'; greeting = '🎄 Chúc Mừng Giáng Sinh!'; } else if ((month === 1) || (month === 2 && day <= 20)) { themeClass = 'theme-tet'; icon = '🌸'; color = '#ffb7b2'; greeting = '🧧 Chúc Mừng Năm Mới!'; } if (themeClass) { body.classList.add(themeClass); document.getElementById('seasonal-greeting').textContent = greeting; setInterval(() => { const f = document.createElement('div'); f.innerHTML = icon; f.className = 'falling-item'; f.style.left = Math.random() * 100 + 'vw'; f.style.fontSize = (Math.random() * 1.5 + 0.5) + 'rem'; f.style.color = color; f.style.animationDuration = (Math.random() * 5 + 3) + 's'; document.body.appendChild(f); setTimeout(() => f.remove(), 8000); }, 400); } };
 let _cachedGeminiKey = null;
     window.app = {
+resetClassData: async () => {
+            if (!confirm("⚠️ CẢNH BÁO: Bạn muốn XÓA TOÀN BỘ dữ liệu lớp học?")) return;
+            const pass = prompt("Nhập mật khẩu Admin:");
+            if (pass !== currentUser.password) return alert("Sai mật khẩu!");
+            
+            try {
+                const db = firebase.firestore();
+                const storage = firebase.storage();
+                const folders = ['avatars', 'banner', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_stars', 'posts_private'];
+                const cols = ['chat', 'gratitude_tree', 'quiz_results', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private'];
 
+                // Xóa Ảnh
+                for (const f of folders) {
+                    try {
+                        const res = await storage.ref(`artifacts/${appId}/${f}`).listAll();
+                        await Promise.all(res.items.map(i => i.delete()));
+                    } catch (e) {}
+                }
+                // Xóa Data
+                for (const c of cols) {
+                    const snap = await db.collection(`artifacts/${appId}/${c}`).get();
+                    await Promise.all(snap.docs.map(d => d.ref.delete()));
+                }
+                // Reset User
+                const uSnap = await db.collection(`artifacts/${appId}/users`).get();
+                uSnap.forEach(d => {
+                    if (d.id !== 'admin' && d.id !== currentUser.id) d.ref.delete();
+                    else d.ref.update({ coins: 0, inventory: [], frame: null, pet: null, lastCheckIn: null, avatarUrl: '' });
+                });
+                // Reset Config
+                await db.doc(`artifacts/${appId}/quiz/data`).set({ list: [] });
+                await db.doc(`artifacts/${appId}/config/main`).set({ bannerUrl: null }, { merge: true });
+
+                alert("✅ Đã xóa sạch!");
+                location.reload();
+            } catch (e) { alert("Lỗi: " + e.message); }
+        }, 
+        // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC
         userCache: {},
         startUserListener: () => {
             if (!auth.currentUser) return;
