@@ -1448,91 +1448,76 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             }
         },
 
-   processPetResponse: async (text) => {
+  processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             
-            // Xóa hẹn giờ cũ
             if (window.petBubbleTimer) {
                 clearTimeout(window.petBubbleTimer);
                 window.petBubbleTimer = null;
             }
 
             bubble.classList.remove('hidden');
-            chatText.textContent = "Đợi em xíu... 🤔";
+            chatText.textContent = "Đang kiểm tra danh sách model... 🕵️";
             
-            // --- 1. LẤY API KEY ---
+            // --- 1. LẤY KEY ---
             let keyToUse = _cachedGeminiKey;
             if (!keyToUse) {
                 try {
                     const user = firebase.auth().currentUser;
                     if(user) await user.getIdToken(false);
-                    
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
                     if (keySnap.exists && keySnap.data().gemini) {
                         keyToUse = keySnap.data().gemini;
                         _cachedGeminiKey = keyToUse;
-                    } else {
-                        throw new Error("Thiếu Key");
-                    }
+                    } else throw new Error("Thiếu Key");
                 } catch(e) {
-                    console.error("Lỗi lấy key:", e);
-                    chatText.textContent = "Lỗi kết nối. Thử lại nhé!";
-                    window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
+                    console.error("Lỗi key:", e);
                     return;
                 }
             }
 
-            // --- 2. GỌI GEMINI (ĐÃ SỬA TÊN CHUẨN) ---
+            // --- 2. ĐOẠN CODE SOI DANH SÁCH MODEL (Cái bạn cần đây) ---
             try {
-                // QUAN TRỌNG: Dùng 'gemini-pro-latest' vì 'gemini-pro' bị lỗi 404 với bạn
-                const modelName = 'gemini-pro-latest';
-                
-                // Sử dụng API v1beta như cũ (vì v1 có thể chưa cập nhật tên này)
+                // Gọi API lấy danh sách
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+
+                // IN RA CONSOLE ĐỂ BẠN XEM
+                if (listData.models) {
+                    console.log("🛑 DANH SÁCH MODEL CỦA TÔI:", listData.models.map(m => m.name));
+                    
+                    // Thử hiển thị luôn lên bong bóng chat để bạn dễ nhìn (khỏi cần F12)
+                    chatText.textContent = "Đã in danh sách ra Console (F12). Kiểm tra ngay!";
+                } else {
+                    console.log("🛑 LỖI KHI LẤY DANH SÁCH:", listData);
+                    chatText.textContent = "Không lấy được danh sách model.";
+                }
+
+                // --- 3. ĐOẠN CHẠY TẠM (Để web không bị đơ) ---
+                // Tự động chọn 'gemini-pro' để test
+                const modelName = 'gemini-pro'; 
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
                 
+                // Gọi chat thử 1 câu
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ 
-                        text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". 
-                               Nhiệm vụ: Trả lời ngắn gọn (dưới 30 từ), dễ thương, xưng 'em' gọi 'chủ nhân'. 
-                               Câu hỏi: ${text}`
-                    }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: text }] }] })
                 });
-                
                 const data = await res.json();
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Test xong.";
                 
-                // Kiểm tra lỗi từ Google trả về
-                if(data.error) {
-                    console.error("Lỗi chi tiết:", data.error);
-                    throw new Error(data.error.message);
-                }
-                
-                // Lấy nội dung trả lời
-                const reply = data.candidates && data.candidates[0] && data.candidates[0].content 
-                              ? data.candidates[0].content.parts[0].text 
-                              : "Em chưa hiểu lắm ạ...";
-                
-                // Hiển thị kết quả
-                chatText.textContent = reply;
-                bubble.classList.remove('hidden');
-                
+                // Nói câu trả lời
                 window.app.speak(reply);
-                if(window.app.animatePetClick) window.app.animatePetClick();
                 
-                // Đặt hẹn giờ tắt
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 6000);
+                // Tắt bong bóng sau 10 giây (để lâu chút cho bạn kịp đọc thông báo lỗi nếu có)
+                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 10000);
 
             } catch(e) {
-                console.error("Lỗi AI:", e);
-                // Nếu vẫn lỗi 404 thì báo cụ thể
-                if(e.message.includes('404')) {
-                     chatText.textContent = "Lỗi model. Thử lại sau!";
-                } else {
-                     chatText.textContent = "Hic, mạng lag quá ạ!";
-                }
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
+                console.error("Lỗi test:", e);
+                chatText.textContent = "Lỗi khi test: " + e.message;
             }
         },
         
@@ -1640,6 +1625,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
