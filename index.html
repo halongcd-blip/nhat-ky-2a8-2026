@@ -408,6 +408,42 @@
     margin-bottom: 0.5rem;
     font-family: 'Segoe UI', sans-serif; /* Quay về phông thường cho ngày tháng dễ đọc */
 }
+/* --- CODE KHUNG PLASMA (SCI-FI) --- */
+@keyframes spin-cw { 100% { transform: rotate(360deg); } }
+@keyframes spin-ccw { 100% { transform: rotate(-360deg); } }
+
+.plasma-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Vòng 1: Màu xanh Cyan, xoay theo chiều kim đồng hồ */
+.plasma-ring-1 {
+    position: absolute; inset: -4px; /* Độ rộng viền */
+    border-radius: 50%;
+    border-top: 3px solid #06b6d4; 
+    border-right: 3px solid #06b6d4;
+    border-bottom: 3px solid transparent; 
+    border-left: 3px solid transparent;
+    animation: spin-cw 2s linear infinite; /* Tốc độ xoay */
+    box-shadow: 0 0 10px #06b6d4;
+    z-index: 1;
+    pointer-events: none;
+}
+/* Vòng 2: Màu tím, xoay ngược chiều */
+.plasma-ring-2 {
+    position: absolute; inset: -4px;
+    border-radius: 50%;
+    border-bottom: 3px solid #a855f7; 
+    border-left: 3px solid #a855f7;
+    border-top: 3px solid transparent;
+    border-right: 3px solid transparent;
+    animation: spin-ccw 3s linear infinite; /* Xoay chậm hơn chút */
+    opacity: 0.8;
+    z-index: 1;
+    pointer-events: none;
+}
     </style>
 </head>
 <body class="text-slate-800">
@@ -766,9 +802,19 @@
                         </div>
 <div class="shop-item col-span-2 md:col-span-1"> <div class="w-16 h-16 rounded-full mx-auto mb-2 shadow-lg relative bg-gray-900 frame-diamond"></div>
                             <h4 class="font-bold text-sm text-purple-600">Khung Kim Cương</h4>
-                            <p class="text-xs text-purple-500 font-bold mb-2">3000 Xu</p>
-                            <button onclick="app.buyItem('frame_diamond', 3000)" class="shop-btn btn-buy bg-purple-600 hover:bg-purple-700">Đổi ngay</button>
+                            <p class="text-xs text-purple-500 font-bold mb-2">2000 Xu</p>
+                            <button onclick="app.buyItem('frame_diamond', 2000)" class="shop-btn btn-buy bg-purple-600 hover:bg-purple-700">Đổi ngay</button>
                         </div>
+<div class="shop-item col-span-2 md:col-span-1">
+    <div class="w-16 h-16 mx-auto mb-2 plasma-wrapper">
+        <div class="plasma-ring-1"></div>
+        <div class="plasma-ring-2"></div>
+        <img src="https://via.placeholder.com/64" class="w-full h-full rounded-full relative z-10 bg-gray-900">
+    </div>
+    <h4 class="font-bold text-sm text-cyan-500">Khung Plasma</h4>
+    <p class="text-xs text-cyan-600 font-bold mb-2">3000 Xu</p>
+    <button onclick="app.buyItem('frame_plasma', 3000)" class="shop-btn btn-buy bg-cyan-600 hover:bg-cyan-700">Đổi ngay</button>
+</div>
                     </div>
                 </div>
                 <div class="bg-white p-5 rounded-2xl shadow-lg border border-blue-200">
@@ -935,6 +981,16 @@ firebase.initializeApp(firebaseConfig);
             if (window.app.userCache[uid].frame === 'frame_silver') frameClass = 'frame-silver';
             if (window.app.userCache[uid].frame === 'frame_gold') frameClass = 'frame-gold';
             if (window.app.userCache[uid].frame === 'frame_diamond') frameClass = 'frame-diamond';
+// 👇 BẮT ĐẦU ĐOẠN CODE PLASMA MỚI 👇
+            if (window.app.userCache[uid].frame === 'frame_plasma') {
+                 const s = avatarUrl || 'https://via.placeholder.com/32';
+                 return `<div class="${size} plasma-wrapper shrink-0 m-0.5 ${extraClass}">
+                    <div class="plasma-ring-1"></div>
+                    <div class="plasma-ring-2"></div>
+                    <img src="${s}" class="w-full h-full rounded-full object-cover relative z-10 border-2 border-white/30">
+                </div>`;
+            }
+            // 👆 KẾT THÚC ĐOẠN CODE PLASMA 👆
         }
         const src = avatarUrl || 'https://via.placeholder.com/32';
         return `<img src="${src}" class="${size} rounded-full object-cover shrink-0 ${frameClass} framed-avatar ${extraClass} m-0.5">`;
@@ -1426,7 +1482,7 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
         adminGiveCoins: async () => { const uid = document.getElementById('reward-student-select').value; const amount = parseInt(document.getElementById('reward-amount').value); const reason = document.getElementById('reward-reason').value; if (!uid) return alert("Vui lòng chọn học sinh!"); if (!amount || amount <= 0) return alert("Số xu phải lớn hơn 0!"); try { await updateDoc(doc(db, `artifacts/${appId}/users`, uid), { coins: increment(amount) }); await addDoc(collection(db, `artifacts/${appId}/posts_notif`), { content: `🎁 Cô giáo tặng ${amount} Xu. Lý do: ${reason}`, author: currentUser.name, uid: 'admin', date: new Date().toISOString(), likes: [], comments: [], targetUser: uid }); alert(`Đã tặng ${amount} Xu thành công!`); document.getElementById('reward-amount').value = ''; document.getElementById('reward-reason').value = ''; window.app.loadStudentsForReward(); } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
         
         buyItem: async (id, price) => { if((currentUser.coins||0) < price) return alert("Thiếu xu!"); if((currentUser.inventory||[]).includes(id)) return alert("Đã có!"); if(confirm("Mua?")) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), inventory: arrayUnion(id) }); alert("Đã mua!"); } catch(e){ alert(e.message); } },
-        renderInventory: () => { const list = document.getElementById('inventory-list'), inv = currentUser.inventory||[]; list.innerHTML = inv.length ? inv.map(i => `<div class="p-2 border rounded flex justify-between items-center"><span>${i==='frame_diamond'?'💎 Khung Kim Cương':(i==='frame_gold'?'Khung Vàng':'Khung Bạc')}</span>${currentUser.frame===i ? '<span class="text-green-600 font-bold text-xs">Đang dùng</span>' : `<button onclick="app.equipFrame('${i}')" class="text-blue-500 font-bold text-xs">Dùng</button>`}</div>`).join('') : '<p class="text-gray-400">Trống</p>'; },
+        renderInventory: () => { const list = document.getElementById('inventory-list'), inv = currentUser.inventory||[]; list.innerHTML = inv.length ? inv.map(i => `<div class="p-2 border rounded flex justify-between items-center"><span>${i==='frame_plasma'?'Khung Plasma' : (i==='frame_diamond'?'Khung Kim Cương':(i==='frame_gold'?'Khung Vàng':'Khung Bạc'))}</span>${currentUser.frame===i ? '<span class="text-green-600 font-bold text-xs">Đang dùng</span>' : `<button onclick="app.equipFrame('${i}')" class="text-blue-500 font-bold text-xs">Dùng</button>`}</div>`).join('') : '<p class="text-gray-400">Trống</p>'; },
         equipFrame: async (id) => { try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { frame: id }); alert("Đã thay khung!"); } catch(e){} },
         updateOnlineStatus: () => { const now = Date.now(), users = []; for(const id in window.app.userCache) { const u = window.app.userCache[id]; if(u.lastActive && now - u.lastActive < 60000) users.push(u.name); } const el = document.getElementById('online-users-container'); if(users.length) { el.classList.remove('hidden'); document.getElementById('online-users-list').textContent = users.join(', '); } else el.classList.add('hidden'); },
         reportOnline: async () => { if(currentUser?.id) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { lastActive: Date.now() }); } catch(e) {} },
