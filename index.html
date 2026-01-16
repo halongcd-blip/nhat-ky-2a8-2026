@@ -1487,12 +1487,11 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 
             // 3. GỌI GEMINI (Giữ nguyên logic của bạn)
             try {
-               // --- CẤU HÌNH GỌI THẲNG (KHÔNG CẦN DÒ TÌM) ---
-                // Dùng đúng cái tên thật bạn vừa tìm thấy: 'gemini-pro-latest'
-                const modelName = 'gemini-pro-latest';
+// --- CẤU HÌNH MỚI (DÙNG FLASH BẢN V1) ---
+                const modelName = 'gemini-1.5-flash'; 
                 
-                // Gọi thẳng URL, tiết kiệm được 1-2 giây chờ đợi
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
+                // 👇 CHÚ Ý: Đổi 'v1beta' thành 'v1' ở dòng dưới đây
+                const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${keyToUse}`;
                 
                 const res = await fetch(url, {
                     method: 'POST',
@@ -1631,6 +1630,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
