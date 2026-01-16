@@ -1487,11 +1487,21 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 
             // 3. GỌI GEMINI (Giữ nguyên logic của bạn)
             try {
-// --- CẤU HÌNH MỚI (DÙNG FLASH BẢN V1) ---
-                const modelName = 'gemini-1.5-flash'; 
+// --- BƯỚC KIỂM TRA: IN RA DANH SÁCH MODEL ---
+            try {
+                // 1. Lấy danh sách về
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+
+                // 2. In ra màn hình Console để bạn đọc
+                console.log("🛑 DANH SÁCH MODEL CỦA TÔI:", listData.models.map(m => m.name));
                 
-                // 👇 CHÚ Ý: Đổi 'v1beta' thành 'v1' ở dòng dưới đây
-                const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${keyToUse}`;
+                // 3. Tạm thời dùng lại Gemin Pro (cái chắc chắn chạy) để web không lỗi
+                const modelName = 'gemini-pro';
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
+                
+                // ... (Phần code gọi fetch bên dưới giữ nguyên) ...
                 
                 const res = await fetch(url, {
                     method: 'POST',
@@ -1630,6 +1640,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
