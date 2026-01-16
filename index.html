@@ -1531,27 +1531,54 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
         },
         
         speak: (text) => {
-            // Ngắt lời cũ nếu đang nói
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
+            // 1. Ngắt lời cũ nếu đang nói
+            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+            
+            // 2. [CODE MỚI] ƯU TIÊN DÙNG GIỌNG GOOGLE ONLINE (Chuẩn 100% Tiếng Việt)
+            try {
+                const audio = document.getElementById('pet-audio');
+                // Link gọi giọng Google Dịch
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
+                
+                audio.src = url;
+                audio.volume = 1.0;
+                
+                const playPromise = audio.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Google lỗi, chuyển sang giọng máy:", error);
+                        // Nếu Google lỗi (do mạng/chặn), gọi hàm dự phòng bên dưới
+                        window.app.speakNative(text);
+                    });
+                }
+            } catch (e) {
+                // Nếu code lỗi, cũng gọi hàm dự phòng
+                window.app.speakNative(text);
             }
+        }, // <--- NHỚ CÓ DẤU PHẨY Ở ĐÂY
 
+        // 3. HÀM DỰ PHÒNG (CODE CŨ CỦA BẠN - ĐÃ NÂNG CẤP NHẸ)
+        speakNative: (text) => {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; // Thiết lập tiếng Việt
-            utterance.rate = 1.1;     // Tốc độ nói (1.0 là bình thường)
-            utterance.pitch = 1.2;    // Cao độ (tăng lên để giọng trẻ con hơn)
+            utterance.lang = 'vi-VN'; 
+            utterance.rate = 1.1; 
+            utterance.pitch = 1.2;
             utterance.volume = 1;
 
-            // Lấy danh sách giọng đọc và ưu tiên giọng Google hoặc giọng nữ
             const voices = window.speechSynthesis.getVoices();
-            // Cố gắng tìm giọng tiếng Việt
-            const vnVoice = voices.find(v => v.lang.includes('vi'));
-            if (vnVoice) {
-                utterance.voice = vnVoice;
+            
+            // [NÂNG CẤP] Ưu tiên tìm giọng có chữ "Google" trong máy trước
+            let vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
+            // Nếu không có mới tìm giọng tiếng Việt bất kỳ
+            if (!vnVoice) {
+                vnVoice = voices.find(v => v.lang.includes('vi'));
             }
+            
+            if (vnVoice) utterance.voice = vnVoice;
 
             window.speechSynthesis.speak(utterance);
-        }
+        },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
