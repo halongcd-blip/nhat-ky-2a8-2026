@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     <style>
 /* Hiệu ứng khung vàng lấp lánh */
 .frame-gold-sparkle {
@@ -743,6 +744,11 @@
                 </div>
             </div>
 
+
+
+
+
+
             <div id="admin-panel" class="hidden space-y-6">
                 <div class="bg-yellow-50 p-5 rounded-2xl shadow-sm border border-yellow-200">
                     <h3 class="font-bold text-yellow-800 mb-3"><i data-lucide="gift"></i> Tặng Điểm Thưởng (Xu)</h3>
@@ -769,6 +775,13 @@
                     <h3 class="font-bold text-gray-700 mb-3">Danh Sách Lớp</h3>
                     <div id="user-list" class="space-y-2 text-sm">Loading...</div>
                 </div>
+<div class="mt-8 pt-6 border-t-2 border-red-100 text-center">
+                    <p class="text-xs text-red-500 mb-2 font-bold uppercase tracking-widest">Khu vực nguy hiểm</p>
+                    <button id="btn-reset-web" onclick="window.app.resetClassData()" class="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition flex justify-center items-center gap-2">
+                        <i data-lucide="trash-2"></i> XÓA TOÀN BỘ DỮ LIỆU & LÀM MỚI WEB
+                    </button>
+                    <p class="text-[10px] text-gray-400 mt-2 italic">Dùng khi kết thúc năm học. Xóa sạch bài viết, ảnh, học sinh. Giữ lại Admin.</p>
+                </div>
             </div>
             
             <div id="settings-panel" class="hidden space-y-6">
@@ -787,6 +800,7 @@
                     <input id="new-password" type="password" class="w-full p-3 mb-2 rounded-xl border bg-gray-50 text-sm" placeholder="Mật khẩu mới">
                     <input id="confirm-password" type="password" class="w-full p-3 mb-3 rounded-xl border bg-gray-50 text-sm" placeholder="Nhập lại mật khẩu mới">
                     <button onclick="app.changePassword()" id="btn-change-pass" class="w-full py-3 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-700 transition">Lưu Mật Khẩu</button>
+                
                 </div>
             </div>
 
@@ -828,12 +842,12 @@
 
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
 // Thêm dòng này để dùng trí tuệ nhân tạo
 
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, setDoc, getDoc, limit, startAfter, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, getDocs, where, setDoc, getDoc, limit, startAfter, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyBNemOkL1Y3p2CSH8dw3zfq1vFe9XXNDTM",
@@ -913,7 +927,44 @@ firebase.initializeApp(firebaseConfig);
     const applySeasonalTheme = () => { const today = new Date(); const month = today.getMonth() + 1; const day = today.getDate(); const body = document.body; let icon = ''; let color = ''; let themeClass = ''; let greeting = ''; if (month === 12 && day <= 30) { themeClass = 'theme-xmas'; icon = '❄️'; color = '#fff'; greeting = '🎄 Chúc Mừng Giáng Sinh!'; } else if ((month === 1) || (month === 2 && day <= 20)) { themeClass = 'theme-tet'; icon = '🌸'; color = '#ffb7b2'; greeting = '🧧 Chúc Mừng Năm Mới!'; } if (themeClass) { body.classList.add(themeClass); document.getElementById('seasonal-greeting').textContent = greeting; setInterval(() => { const f = document.createElement('div'); f.innerHTML = icon; f.className = 'falling-item'; f.style.left = Math.random() * 100 + 'vw'; f.style.fontSize = (Math.random() * 1.5 + 0.5) + 'rem'; f.style.color = color; f.style.animationDuration = (Math.random() * 5 + 3) + 's'; document.body.appendChild(f); setTimeout(() => f.remove(), 8000); }, 400); } };
 let _cachedGeminiKey = null;
     window.app = {
+resetClassData: async () => {
+            if (!confirm("⚠️ CẢNH BÁO: Bạn muốn XÓA TOÀN BỘ dữ liệu lớp học?")) return;
+            const pass = prompt("Nhập mật khẩu Admin:");
+            if (pass !== currentUser.password) return alert("Sai mật khẩu!");
+            
+            try {
+                const db = firebase.firestore();
+                const storage = firebase.storage();
+                const folders = ['avatars', 'banner', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_stars', 'posts_private'];
+                const cols = ['chat', 'gratitude_tree', 'quiz_results', 'posts_diary', 'posts_pets', 'posts_chat', 'posts_notif', 'posts_stars', 'posts_bday', 'posts_private'];
 
+                // Xóa Ảnh
+                for (const f of folders) {
+                    try {
+                        const res = await storage.ref(`artifacts/${appId}/${f}`).listAll();
+                        await Promise.all(res.items.map(i => i.delete()));
+                    } catch (e) {}
+                }
+                // Xóa Data
+                for (const c of cols) {
+                    const snap = await db.collection(`artifacts/${appId}/${c}`).get();
+                    await Promise.all(snap.docs.map(d => d.ref.delete()));
+                }
+                // Reset User
+                const uSnap = await db.collection(`artifacts/${appId}/users`).get();
+                uSnap.forEach(d => {
+                    if (d.id !== 'admin' && d.id !== currentUser.id) d.ref.delete();
+                    else d.ref.update({ coins: 0, inventory: [], frame: null, pet: null, lastCheckIn: null, avatarUrl: '' });
+                });
+                // Reset Config
+                await db.doc(`artifacts/${appId}/quiz/data`).set({ list: [] });
+                await db.doc(`artifacts/${appId}/config/main`).set({ bannerUrl: null }, { merge: true });
+
+                alert("✅ Đã xóa sạch!");
+                location.reload();
+            } catch (e) { alert("Lỗi: " + e.message); }
+        }, 
+        // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC
         userCache: {},
         startUserListener: () => {
             if (!auth.currentUser) return;
@@ -1125,6 +1176,7 @@ let _cachedGeminiKey = null;
             });
         },
 
+        // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC ĐỂ NỐI VỚI HÀM LOGIN BÊN DƯỚI ^^^
         // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
         login: async () => { const u = document.getElementById('username').value.trim(); const p = document.getElementById('password').value.trim(); const err = document.getElementById('login-error'); if(!u || !p) return; try { if (!auth.currentUser) await signInAnonymously(auth); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', u)); const snap = await getDocs(q); if (!snap.empty) { const d = snap.docs[0].data(); if (d.password === p) { currentUser = { id: snap.docs[0].id, ...d }; window.app.onLoginSuccess(); } else { err.textContent = "Sai mật khẩu!"; err.classList.remove('hidden'); } } else { if(u === 'admin' && p === 'admin') { const adminRef = doc(db, `artifacts/${appId}/users`, 'admin'); const adminSnap = await getDoc(adminRef); let adminData = { username: 'admin', password: 'admin', name: 'Cô Giáo', role: 'admin', dob: '' }; if(adminSnap.exists()) { adminData = { ...adminData, ...adminSnap.data() }; } else { adminData.avatarUrl = ''; } await setDoc(adminRef, adminData, {merge:true}); currentUser = { id: 'admin', ...adminData }; window.app.onLoginSuccess(); } else { err.textContent = "Không tìm thấy tài khoản!"; err.classList.remove('hidden'); } } } catch(e) { err.textContent = "Lỗi kết nối: " + e.message; err.classList.remove('hidden'); } },
         onLoginSuccess: () => { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('login-view').classList.remove('active-flex'); document.getElementById('dashboard-view').classList.add('active-block'); document.getElementById('user-name').textContent = currentUser.name; document.getElementById('admin-card').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('btn-clear-chat').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('user-balance-display').classList.remove('hidden'); document.getElementById('current-coins').textContent = currentUser.coins || 0; window.app.loadBanner(); window.app.loadChat(); window.app.checkCheckInStatus(); window.app.checkNotifications(); window.app.reportOnline(); setInterval(window.app.reportOnline, 30000); },
@@ -1208,7 +1260,7 @@ msgs.forEach(m => {
             // - Để test nhanh: nhân 20 (1 tiếng tụt 20%)
             // - Để dùng thật: nhân 2 hoặc 4
             // Ở đây tôi để nhân 5 (1 tiếng tụt 5%) cho bạn dễ thấy
-            const reduction = Math.floor(hoursPassed * 5);
+            const reduction = Math.floor(hoursPassed * 1);
 
             // Bỏ điều kiện >= 1 để nó trừ liên tục, dễ kiểm tra hơn
             if (reduction > 0) { 
@@ -1361,145 +1413,145 @@ msgs.forEach(m => {
 // --- TÍNH NĂNG TRÒ CHUYỆN VỚI THÚ CƯNG (AI) ---
         
         // --- BẮT ĐẦU CODE AI MỚI ---
-       // --- 1. HÀM MICRO NÂNG CẤP CHO IPHONE ---
         startListening: () => {
-            // Kiểm tra hỗ trợ (Ưu tiên webkit cho iPhone)
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if(!Speech) return alert("Trình duyệt không hỗ trợ Mic. Hãy dùng Safari (iPhone) hoặc Chrome (PC).");
-
+            if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
             const rec = new Speech();
             rec.lang = 'vi-VN';
-            rec.continuous = false;
-            rec.interimResults = false;
-
             const btn = document.getElementById('btn-mic');
-            btn.classList.add('bg-red-500', 'animate-pulse'); // Hiệu ứng đang nghe
-
-            rec.onstart = () => { console.log("Đang nghe..."); };
-            
+btn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+btn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+            rec.start();
             rec.onresult = (e) => { 
                 const t = e.results[0][0].transcript; 
                 document.getElementById('pet-input-text').value = t; 
-                window.app.processPetResponse(t); // Tự động gửi luôn
+                window.app.processPetResponse(t); 
             };
-
             rec.onend = () => {
-                btn.classList.remove('bg-red-500', 'animate-pulse');
-                btn.classList.add('bg-blue-500');
-            };
-
+    const btn = document.getElementById('btn-mic');
+    btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+    btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+};
             rec.onerror = (e) => { 
-                btn.classList.remove('bg-red-500', 'animate-pulse');
-                btn.classList.add('bg-blue-500');
-                if (e.error === 'not-allowed' || e.error === 'permission-denied') {
-                    alert("⚠️ LỖI MIC: Hãy vào Cài đặt (Settings) -> Safari -> Micro -> Chọn 'Cho phép' (Allow).");
-                } else if (e.error === 'no-speech') {
-                    // Không nói gì thì bỏ qua
-                } else {
-                    alert("Lỗi Mic: " + e.error);
-                }
+                if(e.error !== 'no-speech') console.log("Lỗi Micro:", e.error);
+                const btn = document.getElementById('btn-mic');
+btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             };
-            
-            try { rec.start(); } catch(e) { alert("Không thể khởi động Mic: " + e.message); }
         },
 
-        // --- 2. HÀM XỬ LÝ VỚI CƠ CHẾ 'MỞ KHÓA' ÂM THANH ---
-        processPetResponse: async (text) => {
-            // [MẸO QUAN TRỌNG CHO IPHONE]: Phát ngay một âm thanh rỗng để "chiếm quyền" loa
-            const audio = document.getElementById('pet-audio');
-            audio.src = "https://github.com/anars/blank-audio/blob/master/250-milliseconds-of-silence.mp3?raw=true";
-            audio.play().catch(e => console.log("Chưa mở khóa được loa:", e));
+        sendPetText: () => {
+            const t = document.getElementById('pet-input-text').value;
+            if(t) {
+                document.getElementById('pet-input-text').value = '';
+                window.app.processPetResponse(t);
+            }
+        },
 
+     processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             
-            if (window.petBubbleTimer) clearTimeout(window.petBubbleTimer);
-            bubble.classList.remove('hidden');
-            chatText.innerHTML = "Đợi em xíu... <span class='animate-spin inline-block'>⏳</span>";
+            // 1. HỦY LỆNH ẨN CŨ (SỬA LỖI MẤT CHỮ LẦN 2)
+            if (window.petBubbleTimer) {
+                clearTimeout(window.petBubbleTimer);
+                window.petBubbleTimer = null;
+            }
 
-            // Lấy Key (Code cũ của bạn)
+            bubble.classList.remove('hidden');
+            chatText.textContent = "Đợi em xíu... 🤔";
+            
+            // 2. KIỂM TRA KEY (Ưu tiên Key đã lấy sẵn ở Bước 1)
             let keyToUse = _cachedGeminiKey;
+
+            // Nếu xui xẻo chưa có Key, mới phải đi lấy (Phương án dự phòng)
             if (!keyToUse) {
                 try {
                     const user = firebase.auth().currentUser;
-                    if(user) await user.getIdToken(false);
+                    if(user) await user.getIdToken(false); // Dùng false để nhanh hơn
+                    
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
                     if (keySnap.exists && keySnap.data().gemini) {
                         keyToUse = keySnap.data().gemini;
-                        _cachedGeminiKey = keyToUse;
-                    } else throw new Error("Thiếu Key");
+                        _cachedGeminiKey = keyToUse; // Lưu lại
+                    } else {
+                        throw new Error("Thiếu Key");
+                    }
                 } catch(e) {
-                    chatText.textContent = "Lỗi kết nối!";
+                    console.error("Lỗi lấy key:", e);
+                    chatText.textContent = "Lỗi kết nối. Thử lại nhé!";
+                    window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
                     return;
                 }
             }
 
-            try {
-                // Gọi model 2.0 Flash (Giữ nguyên như đã sửa)
+            // 3. GỌI GEMINI (Giữ nguyên logic của bạn)
+            try {  // <--- GIỮ NGUYÊN DÒNG NÀY
+            
+                // --- CẤU HÌNH GỌI THẲNG (KHÔNG CẦN DÒ TÌM) ---
+                // Dùng đúng cái tên thật bạn vừa tìm thấy: 'gemini-pro-latest'
                 const modelName = 'gemini-2.0-flash';
+                
+                // Gọi thẳng URL
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
+                
+                // ... (Phần code gọi fetch bên dưới giữ nguyên) ...
                 
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ 
-                        text: `Bạn là thú cưng. Trả lời ngắn gọn dưới 20 từ, dễ thương. Câu hỏi: ${text}`
+                        text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ:
+                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
+                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
+                                4. Trả lời cực kỳ ngắn gọn, Không dùng icon. Câu hỏi: ${text}`
                     }] }] })
                 });
                 
                 const data = await res.json();
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Em không hiểu...";
+                if(data.error) throw new Error(data.error.message);
                 
-                // Hiển thị và Đọc
-                // Thêm nút LOA thủ công đề phòng iPhone vẫn chặn tự động
-                chatText.innerHTML = `${reply} <button onclick="window.app.speak('${reply}')" class="ml-1 text-blue-500 bg-blue-100 rounded-full p-1 text-xs">🔊</button>`;
+                const reply = data.candidates[0].content.parts[0].text;
+                
+                // Hiển thị kết quả
+                chatText.textContent = reply;
+                bubble.classList.remove('hidden'); // Đảm bảo hiện
                 
                 window.app.speak(reply);
-                window.app.animatePetClick && window.app.animatePetClick();
+                if(window.app.animatePetClick) window.app.animatePetClick();
                 
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 10000); // Tăng thời gian hiển thị lên 10s
+                // Đặt hẹn giờ tắt mới
+                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 6000);
 
             } catch(e) {
-                console.error(e);
-                chatText.textContent = "Mạng lag quá!";
+                console.error("Lỗi AI:", e);
+                chatText.textContent = "Hic, mạng lag quá ạ!";
+                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
-
-        // --- 3. HÀM ĐỌC (CẢI TIẾN) ---
+        
         speak: (text) => {
-            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-            const audio = document.getElementById('pet-audio'); 
-
-            // CÁCH 1: Dùng Google TTS (Ưu tiên)
-            try {
-                // Thêm client=dict-tts thường ổn định hơn trên PC
-                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=dict-tts`;
-                audio.src = url;
-                audio.volume = 1.0;
-                
-                const p = audio.play();
-                if (p !== undefined) {
-                    p.catch(e => {
-                        console.log("Google TTS lỗi, chuyển sang Cách 2:", e);
-                        window.app.speakNative(text);
-                    });
-                }
-            } catch (e) {
-                window.app.speakNative(text);
+            // Ngắt lời cũ nếu đang nói
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
             }
-        },
 
-        speakNative: (text) => {
-            // CÁCH 2: Dùng giọng máy (Windows/iOS)
-            const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'vi-VN'; 
-            u.rate = 1.1; 
-            // Cố tìm giọng tiếng Việt
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN'; // Thiết lập tiếng Việt
+            utterance.rate = 1.1;     // Tốc độ nói (1.0 là bình thường)
+            utterance.pitch = 1.2;    // Cao độ (tăng lên để giọng trẻ con hơn)
+            utterance.volume = 1;
+
+            // Lấy danh sách giọng đọc và ưu tiên giọng Google hoặc giọng nữ
             const voices = window.speechSynthesis.getVoices();
+            // Cố gắng tìm giọng tiếng Việt
             const vnVoice = voices.find(v => v.lang.includes('vi'));
-            if (vnVoice) u.voice = vnVoice;
-            window.speechSynthesis.speak(u);
-        },
+            if (vnVoice) {
+                utterance.voice = vnVoice;
+            }
+
+            window.speechSynthesis.speak(utterance);
+        }
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
@@ -1582,6 +1634,8 @@ msgs.forEach(m => {
 </body>
 
 </html>
+
+
 
 
 
