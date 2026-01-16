@@ -1362,29 +1362,51 @@ msgs.forEach(m => {
         
         // --- BẮT ĐẦU CODE AI MỚI ---
         startListening: () => {
+            // Kiểm tra xem trình duyệt có hỗ trợ không
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
+            if(!Speech) { 
+                alert("Rất tiếc, trình duyệt này không hỗ trợ Micro. Hãy thử dùng Google Chrome hoặc Safari mới nhất."); 
+                return; 
+            }
+
             const rec = new Speech();
             rec.lang = 'vi-VN';
+            rec.continuous = false;
+            rec.interimResults = false;
+
             const btn = document.getElementById('btn-mic');
-btn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-btn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+            
+            // Hiệu ứng đang nghe
+            btn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+            btn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+
             rec.start();
+
             rec.onresult = (e) => { 
                 const t = e.results[0][0].transcript; 
                 document.getElementById('pet-input-text').value = t; 
                 window.app.processPetResponse(t); 
             };
+
             rec.onend = () => {
-    const btn = document.getElementById('btn-mic');
-    btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
-    btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
-};
+                // Trả lại màu nút cũ
+                btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+                btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+            };
+
             rec.onerror = (e) => { 
-                if(e.error !== 'no-speech') console.log("Lỗi Micro:", e.error);
-                const btn = document.getElementById('btn-mic');
-btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
-btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                console.log("Lỗi Micro:", e.error);
+                btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+                btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                
+                // Báo lỗi cụ thể cho người dùng
+                if (e.error === 'not-allowed' || e.error === 'permission-denied') {
+                    alert("⚠️ Bạn đã chặn quyền Micro!\n\nHãy vào Cài đặt (Settings) -> Safari -> Micro -> Chọn 'Cho phép' (Allow), sau đó tải lại trang web.");
+                } else if (e.error === 'no-speech') {
+                    // Không nói gì thì thôi, không cần báo lỗi
+                } else {
+                    alert("Lỗi Micro: " + e.error);
+                }
             };
         },
 
@@ -1396,7 +1418,11 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             }
         },
 
-     processPetResponse: async (text) => {
+   
+processPetResponse: async (text) => {
+            // 👇 THÊM DÒNG NÀY ĐỂ MỞ KHÓA LOA IPHONE 👇
+            document.getElementById('pet-audio').play().catch(()=>{}); 
+            // 👆 KẾT THÚC DÒNG MỚI 👆
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             
@@ -1472,27 +1498,47 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
         },
         
         speak: (text) => {
-            // Ngắt lời cũ nếu đang nói
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-            }
+            // 1. Tắt giọng cũ nếu đang nói dở
+            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+            const audio = document.getElementById('pet-audio'); 
 
+            // 2. CÁCH 1: DÙNG GIỌNG GOOGLE ONLINE (Chuẩn 100% Tiếng Việt, không cần cài Win)
+            try {
+                // Tạo link đọc của Google
+                const encodedText = encodeURIComponent(text);
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
+                
+                audio.src = url;
+                audio.volume = 1.0;
+                
+                // Cố gắng phát
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Audio bị chặn hoặc lỗi, chuyển sang cách 2:", error);
+                        // Nếu cách 1 lỗi (do iOS chặn), chuyển sang Cách 2
+                        window.app.speakNative(text);
+                    });
+                }
+            } catch (e) {
+                // Nếu lỗi mạng, dùng cách 2
+                window.app.speakNative(text);
+            }
+        },
+
+        // Hàm phụ: Dùng giọng có sẵn trong máy (Fallback)
+        speakNative: (text) => {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; // Thiết lập tiếng Việt
-            utterance.rate = 1.1;     // Tốc độ nói (1.0 là bình thường)
-            utterance.pitch = 1.2;    // Cao độ (tăng lên để giọng trẻ con hơn)
-            utterance.volume = 1;
-
-            // Lấy danh sách giọng đọc và ưu tiên giọng Google hoặc giọng nữ
+            utterance.lang = 'vi-VN'; 
+            utterance.rate = 1.1; 
+            
+            // Cố gắng tìm giọng Google tiếng Việt hoặc giọng nữ
             const voices = window.speechSynthesis.getVoices();
-            // Cố gắng tìm giọng tiếng Việt
-            const vnVoice = voices.find(v => v.lang.includes('vi'));
-            if (vnVoice) {
-                utterance.voice = vnVoice;
-            }
+            const vnVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Google') || v.name.includes('Vietnamese'));
+            if (vnVoice) utterance.voice = vnVoice;
 
             window.speechSynthesis.speak(utterance);
-        }
+        },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
 
