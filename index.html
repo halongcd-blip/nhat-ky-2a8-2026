@@ -1361,13 +1361,11 @@ msgs.forEach(m => {
 // --- TÍNH NĂNG TRÒ CHUYỆN VỚI THÚ CƯNG (AI) ---
         
         // --- BẮT ĐẦU CODE AI MỚI ---
+       // --- 1. HÀM MICRO NÂNG CẤP CHO IPHONE ---
         startListening: () => {
-            // Kiểm tra xem trình duyệt có hỗ trợ không
+            // Kiểm tra hỗ trợ (Ưu tiên webkit cho iPhone)
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if(!Speech) { 
-                alert("Rất tiếc, trình duyệt này không hỗ trợ Micro. Hãy thử dùng Google Chrome hoặc Safari mới nhất."); 
-                return; 
-            }
+            if(!Speech) return alert("Trình duyệt không hỗ trợ Mic. Hãy dùng Safari (iPhone) hoặc Chrome (PC).");
 
             const rec = new Speech();
             rec.lang = 'vi-VN';
@@ -1375,169 +1373,132 @@ msgs.forEach(m => {
             rec.interimResults = false;
 
             const btn = document.getElementById('btn-mic');
+            btn.classList.add('bg-red-500', 'animate-pulse'); // Hiệu ứng đang nghe
+
+            rec.onstart = () => { console.log("Đang nghe..."); };
             
-            // Hiệu ứng đang nghe
-            btn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-            btn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
-
-            rec.start();
-
             rec.onresult = (e) => { 
                 const t = e.results[0][0].transcript; 
                 document.getElementById('pet-input-text').value = t; 
-                window.app.processPetResponse(t); 
+                window.app.processPetResponse(t); // Tự động gửi luôn
             };
 
             rec.onend = () => {
-                // Trả lại màu nút cũ
-                btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
-                btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                btn.classList.remove('bg-red-500', 'animate-pulse');
+                btn.classList.add('bg-blue-500');
             };
 
             rec.onerror = (e) => { 
-                console.log("Lỗi Micro:", e.error);
-                btn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
-                btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                
-                // Báo lỗi cụ thể cho người dùng
+                btn.classList.remove('bg-red-500', 'animate-pulse');
+                btn.classList.add('bg-blue-500');
                 if (e.error === 'not-allowed' || e.error === 'permission-denied') {
-                    alert("⚠️ Bạn đã chặn quyền Micro!\n\nHãy vào Cài đặt (Settings) -> Safari -> Micro -> Chọn 'Cho phép' (Allow), sau đó tải lại trang web.");
+                    alert("⚠️ LỖI MIC: Hãy vào Cài đặt (Settings) -> Safari -> Micro -> Chọn 'Cho phép' (Allow).");
                 } else if (e.error === 'no-speech') {
-                    // Không nói gì thì thôi, không cần báo lỗi
+                    // Không nói gì thì bỏ qua
                 } else {
-                    alert("Lỗi Micro: " + e.error);
+                    alert("Lỗi Mic: " + e.error);
                 }
             };
+            
+            try { rec.start(); } catch(e) { alert("Không thể khởi động Mic: " + e.message); }
         },
 
-        sendPetText: () => {
-            const t = document.getElementById('pet-input-text').value;
-            if(t) {
-                document.getElementById('pet-input-text').value = '';
-                window.app.processPetResponse(t);
-            }
-        },
+        // --- 2. HÀM XỬ LÝ VỚI CƠ CHẾ 'MỞ KHÓA' ÂM THANH ---
+        processPetResponse: async (text) => {
+            // [MẸO QUAN TRỌNG CHO IPHONE]: Phát ngay một âm thanh rỗng để "chiếm quyền" loa
+            const audio = document.getElementById('pet-audio');
+            audio.src = "https://github.com/anars/blank-audio/blob/master/250-milliseconds-of-silence.mp3?raw=true";
+            audio.play().catch(e => console.log("Chưa mở khóa được loa:", e));
 
-   
-processPetResponse: async (text) => {
-            // 👇 THÊM DÒNG NÀY ĐỂ MỞ KHÓA LOA IPHONE 👇
-            document.getElementById('pet-audio').play().catch(()=>{}); 
-            // 👆 KẾT THÚC DÒNG MỚI 👆
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             
-            // 1. HỦY LỆNH ẨN CŨ (SỬA LỖI MẤT CHỮ LẦN 2)
-            if (window.petBubbleTimer) {
-                clearTimeout(window.petBubbleTimer);
-                window.petBubbleTimer = null;
-            }
-
+            if (window.petBubbleTimer) clearTimeout(window.petBubbleTimer);
             bubble.classList.remove('hidden');
-            chatText.textContent = "Đợi em xíu... 🤔";
-            
-            // 2. KIỂM TRA KEY (Ưu tiên Key đã lấy sẵn ở Bước 1)
-            let keyToUse = _cachedGeminiKey;
+            chatText.innerHTML = "Đợi em xíu... <span class='animate-spin inline-block'>⏳</span>";
 
-            // Nếu xui xẻo chưa có Key, mới phải đi lấy (Phương án dự phòng)
+            // Lấy Key (Code cũ của bạn)
+            let keyToUse = _cachedGeminiKey;
             if (!keyToUse) {
                 try {
                     const user = firebase.auth().currentUser;
-                    if(user) await user.getIdToken(false); // Dùng false để nhanh hơn
-                    
+                    if(user) await user.getIdToken(false);
                     const keySnap = await firebase.firestore().collection("artifacts").doc("system_config").get(); 
                     if (keySnap.exists && keySnap.data().gemini) {
                         keyToUse = keySnap.data().gemini;
-                        _cachedGeminiKey = keyToUse; // Lưu lại
-                    } else {
-                        throw new Error("Thiếu Key");
-                    }
+                        _cachedGeminiKey = keyToUse;
+                    } else throw new Error("Thiếu Key");
                 } catch(e) {
-                    console.error("Lỗi lấy key:", e);
-                    chatText.textContent = "Lỗi kết nối. Thử lại nhé!";
-                    window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
+                    chatText.textContent = "Lỗi kết nối!";
                     return;
                 }
             }
 
-            // 3. GỌI GEMINI (Giữ nguyên logic của bạn)
             try {
-               // GỌI THẲNG MODEL 2.0 FLASH (Nhanh - Rẻ - Thông minh)
+                // Gọi model 2.0 Flash (Giữ nguyên như đã sửa)
                 const modelName = 'gemini-2.0-flash';
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
+                
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ contents: [{ parts: [{ 
-                        text: `Bạn là thú cưng tên "${currentUser?.pet?.name || 'Bé cưng'}" của "${currentUser?.name || 'bạn nhỏ'}". Nhiệm vụ:
-                                1. thi thoảng chào và gọi tên "${currentUser?.name || 'chủ nhân'}" trong câu trả lời.
-                                2. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
-                                4. Trả lời cực kỳ ngắn gọn, Không dùng icon. Câu hỏi: ${text}`
+                        text: `Bạn là thú cưng. Trả lời ngắn gọn dưới 20 từ, dễ thương. Câu hỏi: ${text}`
                     }] }] })
                 });
                 
                 const data = await res.json();
-                if(data.error) throw new Error(data.error.message);
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Em không hiểu...";
                 
-                const reply = data.candidates[0].content.parts[0].text;
-                
-                // Hiển thị kết quả
-                chatText.textContent = reply;
-                bubble.classList.remove('hidden'); // Đảm bảo hiện
+                // Hiển thị và Đọc
+                // Thêm nút LOA thủ công đề phòng iPhone vẫn chặn tự động
+                chatText.innerHTML = `${reply} <button onclick="window.app.speak('${reply}')" class="ml-1 text-blue-500 bg-blue-100 rounded-full p-1 text-xs">🔊</button>`;
                 
                 window.app.speak(reply);
-                if(window.app.animatePetClick) window.app.animatePetClick();
+                window.app.animatePetClick && window.app.animatePetClick();
                 
-                // Đặt hẹn giờ tắt mới
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 6000);
+                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 10000); // Tăng thời gian hiển thị lên 10s
 
             } catch(e) {
-                console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic, mạng lag quá ạ!";
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
+                console.error(e);
+                chatText.textContent = "Mạng lag quá!";
             }
         },
-        
+
+        // --- 3. HÀM ĐỌC (CẢI TIẾN) ---
         speak: (text) => {
-            // 1. Tắt giọng cũ nếu đang nói dở
             if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
             const audio = document.getElementById('pet-audio'); 
 
-            // 2. CÁCH 1: DÙNG GIỌNG GOOGLE ONLINE (Chuẩn 100% Tiếng Việt, không cần cài Win)
+            // CÁCH 1: Dùng Google TTS (Ưu tiên)
             try {
-                // Tạo link đọc của Google
-                const encodedText = encodeURIComponent(text);
-                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
-                
+                // Thêm client=dict-tts thường ổn định hơn trên PC
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=dict-tts`;
                 audio.src = url;
                 audio.volume = 1.0;
                 
-                // Cố gắng phát
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.log("Audio bị chặn hoặc lỗi, chuyển sang cách 2:", error);
-                        // Nếu cách 1 lỗi (do iOS chặn), chuyển sang Cách 2
+                const p = audio.play();
+                if (p !== undefined) {
+                    p.catch(e => {
+                        console.log("Google TTS lỗi, chuyển sang Cách 2:", e);
                         window.app.speakNative(text);
                     });
                 }
             } catch (e) {
-                // Nếu lỗi mạng, dùng cách 2
                 window.app.speakNative(text);
             }
         },
 
-        // Hàm phụ: Dùng giọng có sẵn trong máy (Fallback)
         speakNative: (text) => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; 
-            utterance.rate = 1.1; 
-            
-            // Cố gắng tìm giọng Google tiếng Việt hoặc giọng nữ
+            // CÁCH 2: Dùng giọng máy (Windows/iOS)
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'vi-VN'; 
+            u.rate = 1.1; 
+            // Cố tìm giọng tiếng Việt
             const voices = window.speechSynthesis.getVoices();
-            const vnVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Google') || v.name.includes('Vietnamese'));
-            if (vnVoice) utterance.voice = vnVoice;
-
-            window.speechSynthesis.speak(utterance);
+            const vnVoice = voices.find(v => v.lang.includes('vi'));
+            if (vnVoice) u.voice = vnVoice;
+            window.speechSynthesis.speak(u);
         },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
