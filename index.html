@@ -1489,7 +1489,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             try {
                 // --- SỬA ĐỂ DÙNG GEMINI 1.5 FLASH (NHANH & RẺ) ---
                 // Gọi thẳng tên model, không cần hỏi danh sách nữa
-                const modelName = 'gemini-1.5-flash';
+                const modelName = 'gemini-1.5-flash-001';
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
                 
                 const res = await fetch(url, {
@@ -1629,6 +1629,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
