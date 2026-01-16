@@ -1487,9 +1487,26 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 
             // 3. GỌI GEMINI (Giữ nguyên logic của bạn)
             try {
-              // --- DÙNG GEMINI PRO (BẢN DUY NHẤT CHẠY ĐƯỢC) NHƯNG TỐI ƯU TỐC ĐỘ ---
-                // Gọi thẳng tên 'gemini-pro', bỏ qua bước 'hỏi danh sách' để không bị trễ
-                const modelName = 'gemini-pro'; 
+                // Tự động tìm model phù hợp
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+                
+                if (listData.error) throw new Error(listData.error.message);
+
+                let model = listData.models.find(m => m.name.includes('gemini-1.5-flash'));
+                if (!model) model = listData.models.find(m => m.name.includes('gemini-pro'));
+// 👇👇👇 THÊM DÒNG NÀY ĐỂ BẮT NÓ KHAI TÊN THẬT 👇👇👇
+                console.log("👉 TÊN THẬT CỦA MODEL LÀ:", model.name); 
+
+                if (!model) throw new Error("Không tìm thấy model.");
+                if (!model) model = listData.models.find(m => m.name.includes('gemini'));
+                
+                if (!model) throw new Error("Không tìm thấy model.");
+
+                const modelName = model.name.replace('models/', '');
+                
+                // Gọi API tạo nội dung
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
                 
                 const res = await fetch(url, {
@@ -1629,9 +1646,6 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
-
-
-
 
 
 
