@@ -1448,10 +1448,11 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             }
         },
 
-    processPetResponse: async (text) => {
+   processPetResponse: async (text) => {
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
             
+            // Xóa hẹn giờ cũ
             if (window.petBubbleTimer) {
                 clearTimeout(window.petBubbleTimer);
                 window.petBubbleTimer = null;
@@ -1460,7 +1461,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
             bubble.classList.remove('hidden');
             chatText.textContent = "Đợi em xíu... 🤔";
             
-            // --- KIỂM TRA KEY ---
+            // --- 1. LẤY API KEY ---
             let keyToUse = _cachedGeminiKey;
             if (!keyToUse) {
                 try {
@@ -1482,14 +1483,12 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 }
             }
 
-            // --- GỌI API GEMINI (CODE ĐÃ SỬA LỖI CÚ PHÁP) ---
+            // --- 2. GỌI GEMINI (ĐÃ SỬA TÊN CHUẨN) ---
             try {
-                // 1. In danh sách model ra Console để kiểm tra ngầm (Không ảnh hưởng web)
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`;
-                fetch(listUrl).then(r=>r.json()).then(d => console.log("🛑 DANH SÁCH MODEL GOOGLE CẤP CHO BẠN:", d));
-
-                // 2. Dùng 'gemini-pro' (An toàn nhất để Web chạy lại được ngay)
-                const modelName = 'gemini-pro';
+                // QUAN TRỌNG: Dùng 'gemini-pro-latest' vì 'gemini-pro' bị lỗi 404 với bạn
+                const modelName = 'gemini-pro-latest';
+                
+                // Sử dụng API v1beta như cũ (vì v1 có thể chưa cập nhật tên này)
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyToUse}`;
                 
                 const res = await fetch(url, {
@@ -1503,9 +1502,17 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 });
                 
                 const data = await res.json();
-                if(data.error) throw new Error(data.error.message);
                 
-                const reply = data.candidates[0].content.parts[0].text;
+                // Kiểm tra lỗi từ Google trả về
+                if(data.error) {
+                    console.error("Lỗi chi tiết:", data.error);
+                    throw new Error(data.error.message);
+                }
+                
+                // Lấy nội dung trả lời
+                const reply = data.candidates && data.candidates[0] && data.candidates[0].content 
+                              ? data.candidates[0].content.parts[0].text 
+                              : "Em chưa hiểu lắm ạ...";
                 
                 // Hiển thị kết quả
                 chatText.textContent = reply;
@@ -1519,7 +1526,12 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 
             } catch(e) {
                 console.error("Lỗi AI:", e);
-                chatText.textContent = "Hic, mạng lag quá ạ!";
+                // Nếu vẫn lỗi 404 thì báo cụ thể
+                if(e.message.includes('404')) {
+                     chatText.textContent = "Lỗi model. Thử lại sau!";
+                } else {
+                     chatText.textContent = "Hic, mạng lag quá ạ!";
+                }
                 window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 5000);
             }
         },
@@ -1628,6 +1640,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
 </body>
 
 </html>
+
 
 
 
