@@ -620,7 +620,7 @@
                                     class="absolute top-0 right-0 bg-red-600 text-white w-6 h-6 flex items-center justify-center font-bold z-50 text-xs">X</button>
                             <iframe id="youtube-iframe" width="100%" height="100%" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
                         </div>
-                        <div id="pet-display" class="pet-character pet-move" ...>
+                        
                         <div id="pet-display" class="pet-character pet-move" onclick="window.app.animatePetClick()"></div>
                         <div id="pet-waste-container" class="absolute inset-0 pointer-events-none" style="z-index: 100;"></div>
                         <audio id="pet-audio" loop class="hidden"></audio>
@@ -1618,7 +1618,10 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                                 2. Tính cách: Vui vẻ, hài hước. thi thoảng hỏi vài câu với chủ nhân
                                 3. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
                                 4. Trả lời cực kỳ ngắn gọn, Không dùng icon.
-                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài hát...", hãy tìm ID video Youtube phù hợp và trả về theo định dạng: [VIDEO: ID_VIDEO].
+                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài...", hãy tìm ID Youtube THỰC TẾ của bài hát đó. 
+   Định dạng trả về: [VIDEO: ID_VIDEO].
+   TUYỆT ĐỐI KHÔNG dùng lại ID ví dụ. Phải tìm ID mới chính xác.
+   Ví dụ cấu trúc: Nếu hỏi "Mở Sơn Tùng", trả về "[VIDEO: knW7-x7Y7RE]".
    Ví dụ: Nếu chủ bảo "Mở bài Baby Shark", bạn trả lời: "Dạ, Baby Shark tới đây! [VIDEO: XqZsoesa55w]"
    (Chỉ lấy ID là chuỗi ký tự sau v= trên link youtube).` 
                             }] 
@@ -1661,7 +1664,7 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 if(window.app.animatePetClick) window.app.animatePetClick();
                 
                 // Đặt hẹn giờ tắt mới
-                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 6000);
+                window.petBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 8000);
 
             } catch(e) {
                 console.error("Lỗi AI:", e);
