@@ -1618,15 +1618,11 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                                 2. Tính cách: Vui vẻ, hài hước. thi thoảng hỏi vài câu với chủ nhân
                                 3. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
                                 4. Trả lời cực kỳ ngắn gọn, Không dùng icon.
-                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài...", hãy trả về TỪ KHÓA TÌM KIẾM của bài hát đó (Tiếng Việt hoặc Anh).
-   Định dạng trả về: [VIDEO: Tên bài hát + Tên ca sĩ].
-   Ví dụ: Nếu chủ bảo "Mở Sơn Tùng", trả về "[VIDEO: Son Tung MTP]".
-   Ví dụ: Nếu chủ bảo "Mở Doraemon", trả về "[VIDEO: Doraemon remix]".
-   (CHỈ CẦN TRẢ VỀ TÊN, KHÔNG CẦN TÌM ID SỐ).
-   TUYỆT ĐỐI KHÔNG dùng lại ID ví dụ. Phải tìm ID mới chính xác.
-   Ví dụ cấu trúc: Nếu hỏi "Mở Sơn Tùng", trả về "[VIDEO: knW7-x7Y7RE]".
-   Ví dụ: Nếu chủ bảo "Mở bài Baby Shark", bạn trả lời: "Dạ, Baby Shark tới đây! [VIDEO: XqZsoesa55w]"
-   (Chỉ lấy ID là chuỗi ký tự sau v= trên link youtube).` 
+                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài...", hãy trả về TỪ KHÓA TÌM KIẾM của bài hát đó.
+   Định dạng: [VIDEO: Tên bài hát].
+   Ví dụ: Nếu hỏi "Mở Sơn Tùng", trả về "[VIDEO: Son Tung MTP]".
+   Ví dụ: Nếu hỏi "Mở Doraemon", trả về "[VIDEO: Doraemon remix]".
+   (LƯU Ý: CHỈ TRẢ VỀ TÊN BÀI HÁT, KHÔNG ĐƯỢC BỊA MÃ ID).` 
                             }] 
                         },
                         // 2. Gửi kèm toàn bộ lịch sử chat (Trí nhớ) vào đây
@@ -1638,10 +1634,10 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 if(data.error) throw new Error(data.error.message);
                 
                 const reply = data.candidates[0].content.parts[0].text;
-// 👇👇👇 CODE XỬ LÝ VIDEO MỚI (TỰ ĐỘNG TÌM KIẾM) 👇👇👇
+// 👇👇👇 CODE XỬ LÝ VIDEO (TỰ ĐỘNG TÌM KIẾM) 👇👇👇
                 const videoMatch = reply.match(/\[VIDEO:\s*(.+?)\]/);
                 if (videoMatch && videoMatch[1]) {
-                    const searchTerm = videoMatch[1].trim(); // Lấy tên bài hát (VD: Doraemon)
+                    const searchTerm = videoMatch[1].trim();
                     
                     const player = document.getElementById('pet-media-player');
                     const iframe = document.getElementById('youtube-iframe');
@@ -1649,11 +1645,13 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                     if(player && iframe) {
                         player.classList.remove('hidden');
                         
-                        // Kỹ thuật: Dùng listType=search để Youtube tự phát kết quả đầu tiên tìm thấy
-                        // encodeURIComponent để xử lý các dấu cách, tiếng Việt trong tên bài hát
-                        iframe.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1`;
+                        // Dùng tính năng TÌM KIẾM của Youtube (listType=search)
+                        // Nó sẽ tự động phát video đầu tiên tìm thấy
+                        const searchUrl = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1`;
+                        iframe.src = searchUrl;
                     }
                     
+                    // Xóa mã video để thú không đọc lên
                     reply = reply.replace(videoMatch[0], '').trim();
                 }
                 // 👆👆👆 KẾT THÚC CODE MỚI 👆👆👆
