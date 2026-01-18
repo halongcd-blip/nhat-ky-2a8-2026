@@ -615,6 +615,12 @@
                     <div id="pet-stage-bg" class="pet-stage shadow-lg border-4 border-purple-200 relative bg-white transition-all">
                         
                         <div id="pet-decor-layer"></div>
+<div id="pet-media-player" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-black rounded-xl overflow-hidden shadow-2xl border-4 border-purple-400 w-[280px] h-[160px]">
+                            <button onclick="document.getElementById('pet-media-player').classList.add('hidden'); document.getElementById('youtube-iframe').src=''" 
+                                    class="absolute top-0 right-0 bg-red-600 text-white w-6 h-6 flex items-center justify-center font-bold z-50 text-xs">X</button>
+                            <iframe id="youtube-iframe" width="100%" height="100%" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                        </div>
+                        <div id="pet-display" class="pet-character pet-move" ...>
                         <div id="pet-display" class="pet-character pet-move" onclick="window.app.animatePetClick()"></div>
                         <div id="pet-waste-container" class="absolute inset-0 pointer-events-none" style="z-index: 100;"></div>
                         <audio id="pet-audio" loop class="hidden"></audio>
@@ -1612,7 +1618,9 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                                 2. Tính cách: Vui vẻ, hài hước. thi thoảng hỏi vài câu với chủ nhân
                                 3. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
                                 4. Trả lời cực kỳ ngắn gọn, Không dùng icon.
-                                5. Nếu chủ bảo "mở nhạc", "xem phim", trả về ID Youtube dạng: [VIDEO: ID_VIDEO].` 
+                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài hát...", hãy tìm ID video Youtube phù hợp và trả về theo định dạng: [VIDEO: ID_VIDEO].
+   Ví dụ: Nếu chủ bảo "Mở bài Baby Shark", bạn trả lời: "Dạ, Baby Shark tới đây! [VIDEO: XqZsoesa55w]"
+   (Chỉ lấy ID là chuỗi ký tự sau v= trên link youtube).` 
                             }] 
                         },
                         // 2. Gửi kèm toàn bộ lịch sử chat (Trí nhớ) vào đây
@@ -1624,6 +1632,24 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 if(data.error) throw new Error(data.error.message);
                 
                 const reply = data.candidates[0].content.parts[0].text;
+// 👇👇👇 BẮT ĐẦU CODE XỬ LÝ VIDEO MỚI 👇👇👇
+                const videoMatch = reply.match(/\[VIDEO:\s*(.+?)\]/); // Tìm mã [VIDEO: abc...]
+                if (videoMatch && videoMatch[1]) {
+                    const videoId = videoMatch[1].trim();
+                    
+                    // 1. Hiện khung video
+                    const player = document.getElementById('pet-media-player');
+                    const iframe = document.getElementById('youtube-iframe');
+                    
+                    if(player && iframe) {
+                        player.classList.remove('hidden');
+                        // Tự động chạy (autoplay=1)
+                        iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0`;
+                    }
+                    
+                    // 2. Xóa mã video khỏi câu nói (để thú không đọc lên thành tiếng)
+                    reply = reply.replace(videoMatch[0], '').trim();
+                }
 // [THÊM MỚI] Lưu câu trả lời của thú vào lịch sử
                 window.petChatHistory.push({ role: "model", parts: [{ text: reply }] });
                 
