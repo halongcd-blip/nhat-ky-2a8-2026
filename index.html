@@ -1618,7 +1618,10 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                                 2. Tính cách: Vui vẻ, hài hước. thi thoảng hỏi vài câu với chủ nhân
                                 3. Nếu được hỏi về Toán, Văn hoặc Tiếng Anh, hãy đóng vai một gia sư nhí giải thích thật dễ hiểu, đưa ra ví dụ và gạ chủ nhân học tiếp.
                                 4. Trả lời cực kỳ ngắn gọn, Không dùng icon.
-                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài hát...", hãy tìm ID video Youtube phù hợp và trả về theo định dạng: [VIDEO: ID_VIDEO].` 
+                                5. NHIỆM VỤ ĐẶC BIỆT (DJ): Nếu chủ nhân yêu cầu "mở nhạc", "xem phim", "bật bài...", hãy trả về TỪ KHÓA TÌM KIẾM.
+Định dạng: [VIDEO: Tên bài hát].
+Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
+(CHỈ TRẢ VỀ TÊN, KHÔNG ĐƯỢC BỊA MÃ ID).` 
                             }] 
                         },
                         // 2. Gửi kèm toàn bộ lịch sử chat (Trí nhớ) vào đây
@@ -1632,24 +1635,17 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
                 const reply = data.candidates[0].content.parts[0].text;
 // 👇👇👇 CODE XỬ LÝ VIDEO (TỰ ĐỘNG TÌM KIẾM) 👇👇👇
                 const videoMatch = reply.match(/\[VIDEO:\s*(.+?)\]/);
-                if (videoMatch && videoMatch[1]) {
-                    const searchTerm = videoMatch[1].trim();
-                    
-                    const player = document.getElementById('pet-media-player');
-                    const iframe = document.getElementById('youtube-iframe');
-                    
-                    if(player && iframe) {
-                        player.classList.remove('hidden');
-                        
-                        // Dùng tính năng TÌM KIẾM của Youtube (listType=search)
-                        // Nó sẽ tự động phát video đầu tiên tìm thấy
-                        const searchUrl = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1`;
-                        iframe.src = searchUrl;
-                    }
-                    
-                    // Xóa mã video để thú không đọc lên
-                    reply = reply.replace(videoMatch[0], '').trim();
-                }
+if (videoMatch && videoMatch[1]) {
+    const searchTerm = videoMatch[1].trim();
+    const player = document.getElementById('pet-media-player');
+    const iframe = document.getElementById('youtube-iframe');
+    if(player && iframe) {
+        player.classList.remove('hidden');
+        // Lệnh này bảo Youtube: "Tìm bài này và phát luôn đi!"
+        iframe.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1`;
+    }
+    reply = reply.replace(videoMatch[0], '').trim();
+}
                 // 👆👆👆 KẾT THÚC CODE MỚI 👆👆👆
 // [THÊM MỚI] Lưu câu trả lời của thú vào lịch sử
                 window.petChatHistory.push({ role: "model", parts: [{ text: reply }] });
