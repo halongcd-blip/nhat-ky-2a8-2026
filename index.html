@@ -1632,7 +1632,7 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
                 const data = await res.json();
                 if(data.error) throw new Error(data.error.message);
                 
-                const reply = data.candidates[0].content.parts[0].text;
+                let reply = data.candidates[0].content.parts[0].text;
 // 👇👇👇 CODE XỬ LÝ VIDEO (TỰ ĐỘNG TÌM KIẾM) 👇👇👇
                 const videoMatch = reply.match(/\[VIDEO:\s*(.+?)\]/);
 if (videoMatch && videoMatch[1]) {
@@ -1642,7 +1642,7 @@ if (videoMatch && videoMatch[1]) {
     if(player && iframe) {
         player.classList.remove('hidden');
         // Lệnh này bảo Youtube: "Tìm bài này và phát luôn đi!"
-        iframe.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1`;
+        iframe.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1&origin=${window.location.origin}`;
     }
     reply = reply.replace(videoMatch[0], '').trim();
 }
