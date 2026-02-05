@@ -1815,29 +1815,29 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
             }
         },
         
-        speak: (text) => {
-            // 1. Kiểm tra nếu là iPhone/iPad -> Dùng ngay giọng máy (Ổn định nhất)
+       speak: (text) => {
+            // 1. Nếu là iPhone/iPad -> Dùng ngay giọng máy (Vẫn giữ nguyên cho iPhone)
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             if (isIOS) {
                 window.app.speakNative(text);
                 return; 
             }
 
-            // 2. Nếu là Laptop/Android -> Thử dùng Google Online cho hay
+            // 2. Xử lý Audio trên máy tính
             const audio = document.getElementById('pet-audio');
             if(audio) {
                 audio.pause();
                 audio.currentTime = 0;
             }
 
+            // Cắt ngắn nếu câu quá dài
             let safeText = text;
             if (safeText.length > 150) safeText = safeText.substring(0, 150);
 
             try {
-                // SỬA DÒNG NÀY:
-                // 1. Dùng client=tw-ob (Chuẩn nhất cho API public)
-                // 2. Dùng translate.google.com (Quốc tế) thay vì .com.vn để tránh lỗi chứng chỉ trên một số mạng
-                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
+                // 👇 THAY ĐỔI QUAN TRỌNG: Dùng máy chủ 'googleapis' thay vì 'google.com'
+                // Máy chủ này ổn định hơn nhiều trên máy tính
+                const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
                 
                 if(audio) {
                     audio.src = url;
@@ -1846,8 +1846,7 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
                     
                     if (playPromise !== undefined) {
                         playPromise.catch(e => {
-                            // Nếu Google lỗi -> Chuyển ngay sang giọng máy
-                            console.log("Google lỗi, chuyển giọng máy:", e);
+                            console.log("Google API lỗi, chuyển giọng máy:", e);
                             window.app.speakNative(text);
                         });
                     }
@@ -1859,21 +1858,30 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
 // 👇👇👇 THÊM HÀM NÀY VÀO NGAY SAU HÀM SPEAK 👇👇👇
         speakNative: (text) => {
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
             
-            // BẮT BUỘC KHAI BÁO DÒNG NÀY
-            // Dù máy không có giọng Việt, nó cũng sẽ cố gắng tải giọng online về thay vì dùng giọng Anh
-            utterance.lang = 'vi-VN'; 
-            
-            const voices = window.speechSynthesis.getVoices();
-            // Ưu tiên tìm giọng có chữ "Viet" hoặc "VN"
-            let bestVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Viet'));
-            
-            if (bestVoice) {
-                utterance.voice = bestVoice;
+            // 1. MẸO QUAN TRỌNG: Chrome/Cốc Cốc tải giọng rất chậm.
+            // Nếu danh sách giọng chưa tải xong, hãy chờ nó tải xong rồi mới nói.
+            let voices = window.speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                window.speechSynthesis.onvoiceschanged = () => window.app.speakNative(text);
+                return;
             }
 
-            window.speechSynthesis.speak(utterance);
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN'; 
+            
+            // 2. TÌM GIỌNG VIỆT NAM (Ưu tiên Microsoft An hoặc Google Tiếng Việt)
+            const bestVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Viet') || v.name.includes('An '));
+            
+            if (bestVoice) {
+                // Nếu tìm thấy giọng Việt -> Nói ngay
+                utterance.voice = bestVoice;
+                window.speechSynthesis.speak(utterance);
+            } else {
+                // 3. CHỐT CHẶN: Nếu KHÔNG tìm thấy giọng Việt -> KHÔNG NÓI GÌ CẢ (Im lặng)
+                // Để tránh việc nó đọc tiếng Anh bồi gây khó chịu
+                console.warn("Máy tính này không có giọng Tiếng Việt, con thú sẽ im lặng.");
+            }
         },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
