@@ -630,7 +630,7 @@
                         
                         <div id="pet-display" class="pet-character pet-move" onclick="window.app.animatePetClick()"></div>
                         <div id="pet-waste-container" class="absolute inset-0 pointer-events-none" style="z-index: 100;"></div>
-                        <audio id="pet-audio" class="hidden"></audio>
+                        <audio id="pet-audio" class="hidden" referrerpolicy="no-referrer"></audio>
                         
                         <div id="pet-chat-bubble" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-2xl shadow-lg border-2 border-purple-300 max-w-[200px] text-center z-30 animate-bounce-slow">
                             <p id="pet-chat-text" class="text-sm font-bold text-purple-700">...</p>
@@ -1834,8 +1834,10 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
             if (safeText.length > 150) safeText = safeText.substring(0, 150);
 
             try {
-                // Link Google TTS
-                const url = `https://translate.google.com.vn/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
+                // SỬA DÒNG NÀY:
+                // 1. Dùng client=tw-ob (Chuẩn nhất cho API public)
+                // 2. Dùng translate.google.com (Quốc tế) thay vì .com.vn để tránh lỗi chứng chỉ trên một số mạng
+                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
                 
                 if(audio) {
                     audio.src = url;
@@ -1856,26 +1858,21 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
         },
 // 👇👇👇 THÊM HÀM NÀY VÀO NGAY SAU HÀM SPEAK 👇👇👇
         speakNative: (text) => {
-            // Hủy lời nói cũ nếu đang nói dở
             window.speechSynthesis.cancel();
-
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; // Bắt buộc chọn tiếng Việt
-            utterance.rate = 1.0;     // Tốc độ nói: 1.0 là bình thường, 1.1 là nhanh hơn xíu
             
-            // Lấy danh sách giọng đọc trong máy
+            // BẮT BUỘC KHAI BÁO DÒNG NÀY
+            // Dù máy không có giọng Việt, nó cũng sẽ cố gắng tải giọng online về thay vì dùng giọng Anh
+            utterance.lang = 'vi-VN'; 
+            
             const voices = window.speechSynthesis.getVoices();
-            
-            // Ưu tiên tìm giọng Google hoặc giọng Việt Nam chất lượng cao
-            // Trên iPhone nó sẽ tự chọn giọng Linh/Nam
-            let bestVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
-            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('vi'));
+            // Ưu tiên tìm giọng có chữ "Viet" hoặc "VN"
+            let bestVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Viet'));
             
             if (bestVoice) {
                 utterance.voice = bestVoice;
             }
 
-            // Đọc to lên
             window.speechSynthesis.speak(utterance);
         },
 
