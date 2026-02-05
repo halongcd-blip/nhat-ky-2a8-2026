@@ -1616,6 +1616,8 @@ inputEl.value = ''; } catch (e) { alert("Lỗi gửi comment: " + e.message); } 
         
         // --- BẮT ĐẦU CODE AI MỚI ---
         startListening: () => {
+// 👇 THÊM DÒNG NÀY: Mở khóa loa khi bấm mic
+            if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
             if(!Speech) { alert("Máy này không hỗ trợ Micro. Hãy gõ phím!"); return; }
             const rec = new Speech();
@@ -1643,6 +1645,9 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
         },
 
         sendPetText: () => {
+            // 👇 THÊM DÒNG NÀY: Mở khóa loa iPhone ngay khi bấm nút
+            if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+
             const t = document.getElementById('pet-input-text').value;
             if(t) {
                 document.getElementById('pet-input-text').value = '';
@@ -1811,46 +1816,67 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
         },
         
         speak: (text) => {
-            // 1. Ngắt lời cũ ngay lập tức
-            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-            const audio = document.getElementById('pet-audio');
-            audio.pause();
-            audio.currentTime = 0;
-
-            // 2. MẸO QUAN TRỌNG: Google TTS miễn phí chỉ cho phép dưới 200 ký tự.
-            // Nếu AI nói dài, ta chỉ lấy câu đầu tiên hoặc cắt ngắn lại để Google chịu đọc.
-            // Nếu không cắt, Google trả về lỗi 404 -> Code lại nhảy về giọng máy dở tệ.
-            let safeText = text;
-            if (safeText.length > 150) {
-                // Cố gắng tìm dấu chấm câu để cắt cho tự nhiên
-                const splitIndex = safeText.indexOf('.', 100); 
-                if (splitIndex !== -1) {
-                    safeText = safeText.substring(0, splitIndex + 1); // Lấy câu đầu
-                } else {
-                    safeText = safeText.substring(0, 150); // Hoặc cắt thô nếu không có dấu chấm
-                }
+            // 1. Kiểm tra nếu là iPhone/iPad -> Dùng ngay giọng máy (Ổn định nhất)
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            if (isIOS) {
+                window.app.speakNative(text);
+                return; 
             }
 
+            // 2. Nếu là Laptop/Android -> Thử dùng Google Online cho hay
+            const audio = document.getElementById('pet-audio');
+            if(audio) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+
+            let safeText = text;
+            if (safeText.length > 150) safeText = safeText.substring(0, 150);
+
             try {
-                // 3. Dùng máy chủ google.com.vn để định tuyến tốt hơn ở VN
-                // client=tw-ob là mã client ổn định nhất hiện nay
+                // Link Google TTS
                 const url = `https://translate.google.com.vn/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
                 
-                audio.src = url;
-                audio.volume = 1.0;
-                
-                const playPromise = audio.play();
-                
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.error("Google chặn hoặc lỗi mạng:", error);
-                        // Nếu vẫn lỗi thì đành dùng giọng máy dự phòng (đã nâng cấp ở dưới)
-                        window.app.speakNative(text);
-                    });
+                if(audio) {
+                    audio.src = url;
+                    audio.volume = 1.0;
+                    const playPromise = audio.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.catch(e => {
+                            // Nếu Google lỗi -> Chuyển ngay sang giọng máy
+                            console.log("Google lỗi, chuyển giọng máy:", e);
+                            window.app.speakNative(text);
+                        });
+                    }
                 }
             } catch (e) {
                 window.app.speakNative(text);
             }
+        },
+// 👇👇👇 THÊM HÀM NÀY VÀO NGAY SAU HÀM SPEAK 👇👇👇
+        speakNative: (text) => {
+            // Hủy lời nói cũ nếu đang nói dở
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN'; // Bắt buộc chọn tiếng Việt
+            utterance.rate = 1.0;     // Tốc độ nói: 1.0 là bình thường, 1.1 là nhanh hơn xíu
+            
+            // Lấy danh sách giọng đọc trong máy
+            const voices = window.speechSynthesis.getVoices();
+            
+            // Ưu tiên tìm giọng Google hoặc giọng Việt Nam chất lượng cao
+            // Trên iPhone nó sẽ tự chọn giọng Linh/Nam
+            let bestVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('vi'));
+            
+            if (bestVoice) {
+                utterance.voice = bestVoice;
+            }
+
+            // Đọc to lên
+            window.speechSynthesis.speak(utterance);
         },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
