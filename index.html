@@ -618,12 +618,19 @@
 <div id="pet-media-player" class="hidden absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-black rounded-xl overflow-hidden shadow-2xl border-4 border-purple-400 w-[280px] h-[160px]">
                             <button onclick="document.getElementById('pet-media-player').classList.add('hidden'); document.getElementById('youtube-iframe').src=''" 
                                     class="absolute top-0 right-0 bg-red-600 text-white w-6 h-6 flex items-center justify-center font-bold z-50 text-xs">X</button>
-                            <iframe id="youtube-iframe" width="100%" height="100%" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                           <iframe id="youtube-iframe" 
+        width="100%" 
+        height="100%" 
+        src="" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+        allowfullscreen>
+</iframe>
                         </div>
                         
                         <div id="pet-display" class="pet-character pet-move" onclick="window.app.animatePetClick()"></div>
                         <div id="pet-waste-container" class="absolute inset-0 pointer-events-none" style="z-index: 100;"></div>
-                        <audio id="pet-audio" loop class="hidden"></audio>
+                        <audio id="pet-audio" class="hidden"></audio>
                         
                         <div id="pet-chat-bubble" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-2xl shadow-lg border-2 border-purple-300 max-w-[200px] text-center z-30 animate-bounce-slow">
                             <p id="pet-chat-text" class="text-sm font-bold text-purple-700">...</p>
@@ -1129,8 +1136,10 @@ resetClassData: async () => {
             } 
             else if(tab === 'petgame') { 
                 document.getElementById('petgame-container').classList.remove('hidden'); 
-                window.app.renderPetGame(); 
-            } 
+                // THÊM DÒNG NÀY: Tính toán ngay lập tức, không chờ Server
+                if (window.app.checkPetStatus) window.app.checkPetStatus(); 
+                // window.app.renderPetGame(); // <-- Xóa hoặc comment dòng cũ này đi vì hàm checkPetStatus sẽ tự gọi render
+            }
             else if(tab === 'admin') { 
                 if(currentUser.role !== 'admin') { window.app.goHome(); return; } 
                 document.getElementById('admin-panel').classList.remove('hidden'); 
@@ -1365,8 +1374,8 @@ msgs.forEach(m => {
                 let newHygiene = Math.max(0, p.hygiene - reduction); 
                 
                 let isDead = false; 
-                // Nếu đói bằng 0 trong 5 ngày (120 tiếng) thì chết
-                if (newHunger <= 0 && hoursPassed >= 120) {
+                // Nếu đói bằng 0 trong 5 tiếng thì chết
+                if (newHunger <= 0 && hoursPassed >= 5) {
                      isDead = true; 
                 }
 
@@ -1455,30 +1464,94 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
         stopPetWandering: () => { if(window.app.petWanderTimeout) { clearTimeout(window.app.petWanderTimeout); window.app.petWanderTimeout = null; } },
         animatePetClick: () => { const petEl = document.getElementById('pet-display'); if (!petEl) return; petEl.classList.add('pet-zoom-wobble'); setTimeout(() => { petEl.classList.remove('pet-zoom-wobble'); }, 4000); },
         toggleFoodMenu: () => { document.getElementById('pet-food-menu').classList.toggle('hidden'); },
-        buyPetItem: async (price, type, val) => { const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); currentUser.coins -= price; document.getElementById('current-coins').textContent = currentUser.coins; } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
+        buyPetItem: async (price, type, val) => {
+
+// 👇 THÊM DÒNG CHẶN NÀY VÀO ĐẦU 👇
+            if (currentUser.pet && currentUser.pet.isDead) return alert("Thú cưng đã mất! Hãy hồi sinh để tiếp tục chăm sóc.");
+ const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); currentUser.coins -= price; document.getElementById('current-coins').textContent = currentUser.coins; } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
         playPet: () => { window.app.buyPetItem(0, 'fun', 10); window.app.animatePetClick(); },
         cleanPet: () => { window.app.buyPetItem(0, 'hygiene', 20); },
         revivePet: async () => { if(currentUser.coins < 300) return alert("Cần 300 xu để hồi sinh!"); if(confirm("Dùng 300 xu để hồi sinh?")) { try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-300), "pet.isDead": false, "pet.hunger": 50, "pet.fun": 50, "pet.hygiene": 50 }); alert("Thú cưng đã sống lại!"); window.app.renderPetGame(); } catch(e) { alert(e.message); } } },
         resetPet: async () => { if(confirm("Mất hết cấp độ?")) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { pet: null }); } catch(e){} },
 
         // POSTS & INTERACTION
-        post: async () => { if(!db) return; const txt = document.getElementById('post-content').value.trim(); const file = document.getElementById('file-input').files[0]; if(!txt && !file) return; const btn = document.getElementById('btn-post'); btn.textContent = 'Đang đăng...'; btn.disabled = true; try { let imgUrl = null; if(file) { const compressedFile = await compressImage(file); const sRef = storageRef(getStorage(), `artifacts/${appId}/posts_${currentTab}/${Date.now()}_compressed.jpg`); const snap = await uploadBytes(sRef, compressedFile); imgUrl = await getDownloadURL(snap.ref); } await addDoc(collection(db, `artifacts/${appId}/posts_${currentTab}`), { content: txt, image: imgUrl, author: currentUser.name, uid: currentUser.id, avatarUrl: currentUser.avatarUrl || '', date: new Date().toISOString(), likes: [], comments: [] }); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(10) }); document.getElementById('post-content').value = ''; window.app.clearImg(); } catch(e) { alert("Lỗi: " + e.message); } finally { btn.textContent = 'Đăng'; btn.disabled = false; } },
+        post: async () => { if(!db) return;
+// --- ĐOẠN CODE MỚI 1: KIỂM TRA THỜI GIAN ---
+            const now = Date.now();
+            const lastPost = currentUser.lastPostTime || 0; // Lấy thời gian bài trước (nếu có)
+            const diff = now - lastPost;
+            const cooldownTime = 60 * 1000; // 60 giây (Bạn có thể sửa số này)
+
+            // Nếu chưa đủ 60 giây và không phải Admin thì chặn lại
+            if (diff < cooldownTime && currentUser.role !== 'admin') {
+                const remaining = Math.ceil((cooldownTime - diff) / 1000);
+                alert(`⏳ Vui lòng chờ ${remaining} giây nữa để đăng bài tiếp theo!`);
+                return; // Dừng hàm ngay lập tức
+            }
+            // --- KẾT THÚC ĐOẠN 1 ---
+
+ const txt = document.getElementById('post-content').value.trim(); const file = document.getElementById('file-input').files[0]; if(!txt && !file) return; const btn = document.getElementById('btn-post'); btn.textContent = 'Đang đăng...'; btn.disabled = true; try { let imgUrl = null; if(file) { const compressedFile = await compressImage(file); const sRef = storageRef(getStorage(), `artifacts/${appId}/posts_${currentTab}/${Date.now()}_compressed.jpg`); const snap = await uploadBytes(sRef, compressedFile); imgUrl = await getDownloadURL(snap.ref); } await addDoc(collection(db, `artifacts/${appId}/posts_${currentTab}`), { content: txt, image: imgUrl, author: currentUser.name, uid: currentUser.id, avatarUrl: currentUser.avatarUrl || '', date: new Date().toISOString(), likes: [], comments: [] });
+
+// --- ĐOẠN CODE MỚI 2: CẬP NHẬT THỜI GIAN ĐĂNG VÀO DB ---
+                await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                    coins: increment(10),
+                    lastPostTime: now // <--- Lưu thời điểm hiện tại lại
+                }); 
+                
+                // Cập nhật luôn vào biến cục bộ để không cần tải lại trang
+                currentUser.lastPostTime = now;
+                currentUser.coins = (currentUser.coins || 0) + 10;
+                document.getElementById('current-coins').textContent = currentUser.coins;
+                // --- KẾT THÚC ĐOẠN 2 ---
+
+ await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(10) }); document.getElementById('post-content').value = ''; window.app.clearImg(); } catch(e) { alert("Lỗi: " + e.message); } finally { btn.textContent = 'Đăng'; btn.disabled = false; } },
         handleImg: (inp) => { if(inp.files[0]) { const r = new FileReader(); r.onload = e => { document.getElementById('img-preview').src = e.target.result; document.getElementById('preview-area').classList.remove('hidden'); }; r.readAsDataURL(inp.files[0]); } },
         clearImg: () => { document.getElementById('file-input').value = ''; document.getElementById('preview-area').classList.add('hidden'); },
         like: async (tab, id, liked) => { if (liked) return; const btn = document.querySelector(`button[onclick="window.app.like('${tab}', '${id}', ${liked})"]`); if(btn) { btn.classList.remove('text-gray-400', 'text-gray-500'); btn.classList.add('text-red-500', 'font-bold'); btn.disabled = true; const countSpan = btn.querySelector('span'); if(countSpan) { let currentCount = parseInt(countSpan.textContent) || 0; countSpan.textContent = currentCount + 1; } } const ref = doc(db, `artifacts/${appId}/posts_${tab}`, id); try { await updateDoc(ref, { likes: arrayUnion(currentUser.id) }); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(5) }); } catch(e) { console.error("Lỗi like:", e); if(btn) btn.classList.remove('text-red-500'); } },
-        cmtBtn: async (tab, id) => { const inputEl = document.getElementById(`cmt-${id}`); const val = inputEl ? inputEl.value.trim() : ''; if(val) { try { await updateDoc(doc(db, `artifacts/${appId}/posts_${tab}`, id), { comments: arrayUnion({ user: currentUser.name, uid: currentUser.id, text: val, time: new Date().toISOString() }) }); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(5) }); inputEl.value = ''; } catch (e) { alert("Lỗi gửi comment: " + e.message); } } else { alert("Bạn chưa nhập nội dung!"); } },
+        cmtBtn: async (tab, id) => {
+// 👇👇👇 BẮT ĐẦU ĐOẠN CODE CHẶN SPAM COMMENT (30 GIÂY) 👇👇👇
+            const now = Date.now();
+            const lastCmt = currentUser.lastCommentTime || 0; // Lấy thời gian comment trước
+            const diff = now - lastCmt;
+            const cooldown = 30 * 1000; // 30 giây (Bạn có thể sửa số này)
+
+            // Nếu chưa đủ 30 giây và không phải Admin thì chặn
+            if (diff < cooldown && currentUser.role !== 'admin') {
+                const remaining = Math.ceil((cooldown - diff) / 1000);
+                alert(`⏳ Nói chậm thôi nào! Đợi ${remaining} giây nữa nhé!`);
+                return; // Dừng lại, không cho comment
+            }
+            // 👆👆👆 KẾT THÚC ĐOẠN CODE CHẶN 👆👆👆
+
+ const inputEl = document.getElementById(`cmt-${id}`); const val = inputEl ? inputEl.value.trim() : ''; if(val) { try { await updateDoc(doc(db, `artifacts/${appId}/posts_${tab}`, id), { comments: arrayUnion({ user: currentUser.name, uid: currentUser.id, text: val, time: new Date().toISOString() }) }); 
+
+// 👇👇👇 SỬA ĐOẠN CỘNG XU THÀNH ĐOẠN NÀY 👇👇👇
+                await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { 
+                    coins: increment(5),
+                    lastCommentTime: now // <--- Lưu lại thời điểm vừa comment
+                }); 
+                
+                // Cập nhật ngay vào biến người dùng hiện tại để chặn tiếp lần sau
+                currentUser.lastCommentTime = now;
+                currentUser.coins = (currentUser.coins || 0) + 5;
+                document.getElementById('current-coins').textContent = currentUser.coins;
+                // 👆👆👆 KẾT THÚC ĐOẠN SỬA 👆👆👆
+
+
+
+inputEl.value = ''; } catch (e) { alert("Lỗi gửi comment: " + e.message); } } else { alert("Bạn chưa nhập nội dung!"); } },
         delPost: (tab, id) => { if(confirm("Xóa bài này?")) { deleteDoc(doc(db, `artifacts/${appId}/posts_${tab}`, id)); } },
         uploadBanner: async (file) => { if(!file) return; try { const compressed = await compressImage(file, 1280, 0.8); const sRef = storageRef(getStorage(), `artifacts/${appId}/banner/main`); const snap = await uploadBytes(sRef, compressed); const url = await getDownloadURL(snap.ref); await setDoc(APP_CONFIG_DOC(db), { [BANNER_KEY]: url }, { merge: true }); alert("Banner đã cập nhật!"); } catch(e) { alert("Lỗi: " + e.message); } },
         loadBanner: () => { if(!db) return; onSnapshot(APP_CONFIG_DOC(db), d => { const url = d.exists() ? d.data()[BANNER_KEY] : null; const img = document.getElementById('main-banner'); const placeholder = document.getElementById('banner-placeholder'); const loginImg = document.getElementById('login-banner-img'); if(url) { img.src = url; img.classList.remove('hidden'); placeholder.classList.add('hidden'); if(loginImg) { loginImg.src = url; loginImg.classList.remove('hidden'); } } else { img.classList.add('hidden'); placeholder.classList.remove('hidden'); } document.getElementById('banner-controls').classList.toggle('hidden', currentUser?.role !== 'admin'); }); },
         updateAvatar: async (file) => { if(!file) return; try { const timestamp = Date.now(); const compressed = await compressImage(file, 200, 0.7); const sRef = storageRef(getStorage(), `artifacts/${appId}/avatars/${currentUser.id}_${timestamp}`); const snap = await uploadBytes(sRef, compressed); const url = await getDownloadURL(snap.ref); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { avatarUrl: url }); currentUser.avatarUrl = url; localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('avatar-preview').src = url; alert("Đã đổi Avatar thành công!"); } catch(e) { alert("Lỗi: " + e.message); } },
         changePassword: async () => { const p1 = document.getElementById('new-password').value; const p2 = document.getElementById('confirm-password').value; if(p1.length < 6 || p1!==p2) return alert("Mật khẩu không khớp hoặc quá ngắn"); try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { password: p1 }); alert("Đổi mật khẩu thành công"); } catch(e) { alert("Lỗi: " + e.message); } },
         
-        loadUsers: () => { getDocs(collection(db, `artifacts/${appId}/users`)).then(snap => { document.getElementById('user-list').innerHTML = snap.docs.map(d => { const u = d.data(); return `<div class="flex justify-between items-center p-3 bg-gray-50 rounded border mb-2"><div><b>${u.name}</b> <span class="text-xs text-gray-500">(${u.username}) - ${u.points||0} xu</span></div><button onclick="window.app.delUser('${d.id}')" class="text-red-500"><i data-lucide="trash-2" width="16"></i></button></div>`; }).join(''); lucide.createIcons(); }); },
+        loadUsers: () => { getDocs(collection(db, `artifacts/${appId}/users`)).then(snap => { document.getElementById('user-list').innerHTML = snap.docs.map(d => { const u = d.data(); return `<div class="flex justify-between items-center p-3 bg-gray-50 rounded border mb-2"><div><b>${u.name}</b> <span class="text-xs text-gray-500">(${u.username}) - ${u.coins||0} xu</span></div><button onclick="window.app.delUser('${d.id}')" class="text-red-500"><i data-lucide="trash-2" width="16"></i></button></div>`; }).join(''); lucide.createIcons(); }); },
         createUser: async () => { const u = document.getElementById('new-u').value; const p = document.getElementById('new-p').value; const n = document.getElementById('new-n').value; const d = document.getElementById('new-d').value; if(!u || !p || !n) return alert("Thiếu thông tin!"); await addDoc(collection(db, `artifacts/${appId}/users`), { username: u, password: p, name: n, dob: d, role: 'student', avatarUrl: '', points: 0, inventory: [] }); alert("Đã tạo!"); document.getElementById('new-u').value = ''; document.getElementById('new-p').value = ''; document.getElementById('new-n').value = ''; document.getElementById('new-d').value = ''; },
         delUser: async (id) => { if(confirm("Xóa?")) { await deleteDoc(doc(db, `artifacts/${appId}/users`, id)); window.app.loadUsers(); } },
         bulkCreateUsers: async () => { const fileInput = document.getElementById('bulk-user-file'); const file = fileInput.files[0]; const statusEl = document.getElementById('bulk-status'); const btn = document.getElementById('btn-bulk-create'); if (!file) { statusEl.textContent = "Chọn file!"; statusEl.classList.remove('hidden'); return; } btn.textContent = 'Đang xử lý...'; btn.disabled = true; statusEl.classList.add('hidden'); try { const content = await file.text(); const lines = content.trim().split(/\r?\n/).filter(line => line.trim() !== ''); let successCount = 0; for (const line of lines) { const parts = line.split(',').map(p => p.trim()); if (parts.length >= 2) { const fullName = parts[0]; const dob = parts[1]; const username = removeDiacritics(fullName).toLowerCase().replace(/\s/g, ''); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', username)); const existing = await getDocs(q); if (existing.empty) { await addDoc(collection(db, `artifacts/${appId}/users`), { username, password: '123', name: fullName, dob, role: 'student', avatarUrl: '', points: 0, inventory: [] }); successCount++; } } } statusEl.textContent = `Thành công: ${successCount} TK.`; statusEl.classList.remove('hidden', 'text-red-500'); statusEl.classList.add('text-green-600'); } catch(e) { statusEl.textContent = "Lỗi: " + e.message; statusEl.classList.add('text-red-500'); statusEl.classList.remove('hidden'); } finally { btn.textContent = 'Thực Hiện Tạo'; btn.disabled = false; window.app.loadUsers(); } },
         
-        loadBday: () => { const el = document.getElementById('feed'); const today = new Date(); const cm = today.getMonth() + 1; unsubscribeFeed = onSnapshot(collection(db, `artifacts/${appId}/users`), snap => { el.innerHTML = ''; let list = [], todayUser = null; snap.forEach(d => { const u = d.data(); if(u.dob) { const date = new Date(u.dob); if(date.getMonth() + 1 === cm) { list.push({...u, id:d.id, day: date.getDate()}); if(date.getDate() === today.getDate()) todayUser = {...u, id:d.id}; } } }); if(todayUser) { el.innerHTML += `<div class="bg-gradient-to-r from-pink-100 to-rose-100 p-4 rounded-2xl shadow border-2 border-pink-200 mb-6 text-center"><h3 class="font-bold text-pink-700 text-lg animate-bounce">🎂 CHÚC MỪNG SINH NHẬT! 🎂</h3><img src="${todayUser.avatarUrl || 'https://via.placeholder.com/80?text=HPBD'}" class="w-20 h-20 rounded-full mx-auto my-3 border-4 border-white shadow"><p class="font-bold text-xl text-slate-800">${todayUser.name}</p><p class="text-pink-600">Hôm nay là ngày đặc biệt của bạn ấy!</p><div class="mt-4 text-left bg-white p-3 rounded-xl"><p class="font-bold text-xs mb-2">Gửi lời chúc:</p><div class="flex gap-2"><input id="i-bday" class="flex-1 border p-2 rounded-lg text-sm" placeholder="Chúc mừng sinh nhật..."><button onclick="window.app.cmtBdayBtn('${todayUser.id}')" class="bg-pink-500 text-white px-3 rounded-lg font-bold">Gửi</button></div><div id="comments-bday" class="mt-2 space-y-1">Loading lời chúc...</div></div></div>`; window.app.loadBdayComments(todayUser.id); document.getElementById('post-form').classList.add('hidden'); } if(list.length > 0) { el.innerHTML += `<h3 class="font-bold text-slate-700 mb-3 bg-white inline-block px-3 py-1 rounded-lg">Danh Sách Sinh Nhật Tháng ${cm}</h3>`; list.sort((a,b) => a.day - b.day); el.innerHTML += list.map(u => `<div class="flex items-center bg-white p-3 rounded-xl shadow-sm border mb-2"><i data-lucide="cake" class="text-pink-500 mr-3"></i><div class="flex-1 font-bold text-gray-700">${u.name}</div><span class="bg-pink-100 text-pink-700 px-2 py-1 rounded text-xs font-bold">Ngày ${u.day}</span></div>`).join(''); } else { el.innerHTML += `<div class="text-center text-gray-400">Tháng này không có sinh nhật nào.</div>`; } lucide.createIcons(); }); },
+        loadBday: () => { const el = document.getElementById('feed'); const today = new Date(); const cm = today.getMonth() + 1; unsubscribeFeed = onSnapshot(collection(db, `artifacts/${appId}/users`), snap => { el.innerHTML = ''; let list = [], todayUser = null; snap.forEach(d => { const u = d.data(); if(u.dob) { const date = new Date(u.dob + 'T00:00:00'); if(date.getMonth() + 1 === cm) { list.push({...u, id:d.id, day: date.getDate()}); if(date.getDate() === today.getDate()) todayUser = {...u, id:d.id}; } } }); if(todayUser) { el.innerHTML += `<div class="bg-gradient-to-r from-pink-100 to-rose-100 p-4 rounded-2xl shadow border-2 border-pink-200 mb-6 text-center"><h3 class="font-bold text-pink-700 text-lg animate-bounce">🎂 CHÚC MỪNG SINH NHẬT! 🎂</h3><img src="${todayUser.avatarUrl || 'https://via.placeholder.com/80?text=HPBD'}" class="w-20 h-20 rounded-full mx-auto my-3 border-4 border-white shadow"><p class="font-bold text-xl text-slate-800">${todayUser.name}</p><p class="text-pink-600">Hôm nay là ngày đặc biệt của bạn ấy!</p><div class="mt-4 text-left bg-white p-3 rounded-xl"><p class="font-bold text-xs mb-2">Gửi lời chúc:</p><div class="flex gap-2"><input id="i-bday" class="flex-1 border p-2 rounded-lg text-sm" placeholder="Chúc mừng sinh nhật..."><button onclick="window.app.cmtBdayBtn('${todayUser.id}')" class="bg-pink-500 text-white px-3 rounded-lg font-bold">Gửi</button></div><div id="comments-bday" class="mt-2 space-y-1">Loading lời chúc...</div></div></div>`; window.app.loadBdayComments(todayUser.id); document.getElementById('post-form').classList.add('hidden'); } if(list.length > 0) { el.innerHTML += `<h3 class="font-bold text-slate-700 mb-3 bg-white inline-block px-3 py-1 rounded-lg">Danh Sách Sinh Nhật Tháng ${cm}</h3>`; list.sort((a,b) => a.day - b.day); el.innerHTML += list.map(u => `<div class="flex items-center bg-white p-3 rounded-xl shadow-sm border mb-2"><i data-lucide="cake" class="text-pink-500 mr-3"></i><div class="flex-1 font-bold text-gray-700">${u.name}</div><span class="bg-pink-100 text-pink-700 px-2 py-1 rounded text-xs font-bold">Ngày ${u.day}</span></div>`).join(''); } else { el.innerHTML += `<div class="text-center text-gray-400">Tháng này không có sinh nhật nào.</div>`; } lucide.createIcons(); }); },
         loadBdayComments: (uid) => { onSnapshot(query(collection(db, `artifacts/${appId}/users/${uid}/wishes`), orderBy('time','asc')), snap => { const cEl = document.getElementById('comments-bday'); if(cEl) cEl.innerHTML = snap.empty ? '<i class="text-xs text-gray-400">Chưa có lời chúc nào.</i>' : snap.docs.map(d=> `<div class="text-xs bg-gray-50 p-1 rounded"><b>${d.data().user}:</b> ${d.data().text}</div>`).join(''); }); },
         cmtBdayBtn: (uid) => { const val = document.getElementById('i-bday').value.trim(); if(val) { addDoc(collection(db, `artifacts/${appId}/users/${uid}/wishes`), { user: currentUser.name, text: val, time: new Date().toISOString() }); document.getElementById('i-bday').value = ''; } },
         
@@ -1497,15 +1570,41 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
         toggleNotif: (view = 'dash') => { const list = document.getElementById(view === 'detail' ? 'detail-notif-list' : 'dash-notif-list'); const isHidden = list.style.display === 'none' || list.style.display === ''; document.querySelectorAll('.notif-dropdown').forEach(el => el.style.display = 'none'); if(isHidden) { list.style.display = 'block'; localStorage.setItem('last_notif_check', new Date().toISOString()); document.getElementById('dash-notif-badge').classList.add('hidden'); document.getElementById('detail-notif-badge').classList.add('hidden'); } },
         handleNotifClick: (tab) => { window.app.nav(tab); document.querySelectorAll('.notif-dropdown').forEach(el => el.style.display = 'none'); },
         
-        checkDailyBirthday: async () => { const today = new Date(); const dateKey = `seen_bday_${today.getFullYear()}_${today.getMonth()}_${today.getDate()}`; if (localStorage.getItem(dateKey)) return; try { const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); let bdayNames = []; snap.forEach(d => { const u = d.data(); if (u.dob) { const dob = new Date(u.dob); if (dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth()) { bdayNames.push(u.name); } } }); if (bdayNames.length > 0) { const modal = document.getElementById('birthday-modal'); const nameEl = document.getElementById('bday-names'); if(modal && nameEl) { nameEl.textContent = bdayNames.join(", "); modal.classList.remove('hidden'); var duration = 5 * 1000; var animationEnd = Date.now() + duration; var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 200 }; var interval = setInterval(function() { var timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) { return clearInterval(interval); } var particleCount = 50 * (timeLeft / duration); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2, y: Math.random() - 0.2 } })); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2 + 0.8, y: Math.random() - 0.2 } })); }, 250); localStorage.setItem(dateKey, 'true'); } } } catch (e) { console.error("Lỗi check sinh nhật:", e); } },
+        checkDailyBirthday: async () => { const today = new Date(); const dateKey = `seen_bday_${today.getFullYear()}_${today.getMonth()}_${today.getDate()}`; if (localStorage.getItem(dateKey)) return; try { const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); let bdayNames = []; snap.forEach(d => { const u = d.data(); if (u.dob) { const dob = new Date(u.dob + 'T00:00:00'); if (dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth()) { bdayNames.push(u.name); } } }); if (bdayNames.length > 0) { const modal = document.getElementById('birthday-modal'); const nameEl = document.getElementById('bday-names'); if(modal && nameEl) { nameEl.textContent = bdayNames.join(", "); modal.classList.remove('hidden'); var duration = 5 * 1000; var animationEnd = Date.now() + duration; var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 200 }; var interval = setInterval(function() { var timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) { return clearInterval(interval); } var particleCount = 50 * (timeLeft / duration); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2, y: Math.random() - 0.2 } })); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2 + 0.8, y: Math.random() - 0.2 } })); }, 250); localStorage.setItem(dateKey, 'true'); } } } catch (e) { console.error("Lỗi check sinh nhật:", e); } },
         checkCheckInStatus: () => { const btn = document.getElementById('btn-checkin'); if (!btn) return; const today = new Date().toDateString(); if (currentUser.lastCheckIn === today) { btn.disabled = true; btn.className = "bg-gray-300 text-gray-500 px-3 py-2 rounded-xl font-bold flex items-center gap-1 text-sm cursor-default border border-gray-200"; btn.innerHTML = '<i data-lucide="check" width="16"></i> <span>Đã điểm danh</span>'; lucide.createIcons(); } },
         dailyCheckIn: async () => { const today = new Date().toDateString(); if (currentUser.lastCheckIn === today) return; const btn = document.getElementById('btn-checkin'); btn.innerHTML = '<div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div> Xử lý...'; try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(10), lastCheckIn: today }); currentUser.coins = (currentUser.coins || 0) + 10; currentUser.lastCheckIn = today; document.getElementById('current-coins').textContent = currentUser.coins; window.app.checkCheckInStatus(); alert("🎉 Điểm danh thành công! Bạn nhận được 10 Xu."); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } catch(e) { console.error(e); alert("Lỗi: " + e.message); btn.innerHTML = '<i data-lucide="calendar-check" width="16"></i> <span>Điểm Danh</span>'; lucide.createIcons(); } },
         
         initQuiz: async () => { try { const qSnap = await getDoc(QUIZ_DATA_DOC(db)); if(qSnap.exists()) { activeQuestions = qSnap.data().list || []; } else { activeQuestions = [{ q: "Con gì tám cẳng hai càng?", options: ["Con cua", "Con gà", "Con chó", "Con mèo"], a: 0 }]; } } catch(e) { console.error(e); } if(quizStatusListener) quizStatusListener(); quizStatusListener = onSnapshot(QUIZ_GLOBAL_DOC(db), (docSnap) => { const status = docSnap.exists() ? docSnap.data().status : 'waiting'; window.app.renderQuizUI(status); }); if(currentUser.role === 'admin') { if(quizLiveScoreListener) quizLiveScoreListener(); quizLiveScoreListener = onSnapshot(collection(db, `artifacts/${appId}/quiz_results`), (snap) => { const list = []; snap.forEach(d => list.push(d.data())); list.sort((a,b) => b.score - a.score); const html = list.map(u => `<div class="flex justify-between border-b p-1"><span>${u.name}</span><span class="font-bold text-purple-600">${u.score}</span></div>`).join(''); document.getElementById('quiz-live-score').innerHTML = html || 'Chưa có dữ liệu'; if(document.getElementById('quiz-result').classList.contains('hidden') === false) { const top5 = list.slice(0,5).map((u,i) => `<div class="flex items-center gap-2"><span class="font-bold text-yellow-600">#${i+1}</span> <img src="${window.app.userCache[u.uid]?.avatarUrl || 'https://via.placeholder.com/20'}" class="w-6 h-6 rounded-full"> <span>${u.name}</span> <span class="ml-auto font-bold">${u.score}đ</span></div>`).join(''); document.getElementById('quiz-top5-list').innerHTML = top5; document.getElementById('quiz-top5').classList.remove('hidden'); } }); } },
         openQuizEditor: () => { const container = document.getElementById('editor-questions-list'); container.innerHTML = ''; activeQuestions.forEach((q, idx) => { container.appendChild(window.app.createEditorItem(idx, q)); }); document.getElementById('quiz-editor').classList.remove('hidden'); },
-        createEditorItem: (idx, data = { q: '', options: ['', '', '', ''], a: 0 }) => { const div = document.createElement('div'); div.className = "bg-white p-4 rounded-xl shadow border border-gray-200"; div.innerHTML = `<div class="flex justify-between mb-2"><span class="font-bold text-purple-700">Câu ${idx + 1}</span><button onclick="this.parentElement.parentElement.remove()" class="text-red-500 text-xs font-bold">Xóa</button></div><input class="w-full p-2 border rounded mb-2 font-bold" placeholder="Nhập câu hỏi..." value="${data.q}"><div class="grid grid-cols-1 gap-2">${[0,1,2,3].map(i => `<div class="flex items-center gap-2"><input type="radio" name="correct_${idx}" ${data.a === i ? 'checked' : ''} class="w-4 h-4 accent-green-600"><input class="flex-1 p-2 border rounded text-sm" placeholder="Đáp án ${i+1}" value="${data.options[i]}"></div>`).join('')}</div>`; return div; },
+        createEditorItem: (idx, data = { q: '', options: ['', '', '', ''], a: 0 }) => { 
+            const div = document.createElement('div'); 
+            div.className = "bg-white p-4 rounded-xl shadow border border-gray-200"; 
+            
+            // SỬA: Dùng textarea + Thêm class 'question-input' để dễ tìm + Bỏ value="..." ở trong HTML để tránh lỗi
+            div.innerHTML = `
+                <div class="flex justify-between mb-2">
+                    <span class="font-bold text-purple-700">Câu ${idx + 1}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-red-500 text-xs font-bold">Xóa</button>
+                </div>
+                <textarea class="question-input w-full p-2 border rounded mb-2 font-bold focus:outline-purple-500" placeholder="Nhập câu hỏi (thoải mái viết dài, xuống dòng)..." rows="3"></textarea>
+                <div class="grid grid-cols-1 gap-2">
+                    ${[0,1,2,3].map(i => `
+                        <div class="flex items-center gap-2">
+                            <input type="radio" name="correct_${idx}" ${data.a === i ? 'checked' : ''} class="w-4 h-4 accent-green-600 shrink-0">
+                            <input class="option-input flex-1 p-2 border rounded text-sm" placeholder="Đáp án ${i+1}">
+                        </div>
+                    `).join('')}
+                </div>`; 
+            
+            // QUAN TRỌNG: Gán giá trị bằng Javascript để chấp nhận mọi ký tự đặc biệt (", ', <, >)
+            div.querySelector('.question-input').value = data.q || '';
+            const opts = div.querySelectorAll('.option-input');
+            opts.forEach((inp, i) => inp.value = data.options[i] || '');
+            
+            return div; 
+        },
         addEditorQuestion: () => { const container = document.getElementById('editor-questions-list'); const idx = container.children.length; container.appendChild(window.app.createEditorItem(idx)); },
-        saveQuizQuestions: async () => { const container = document.getElementById('editor-questions-list'); const newQuestions = []; for(let i = 0; i < container.children.length; i++) { const item = container.children[i]; const qText = item.querySelector('input[placeholder="Nhập câu hỏi..."]').value.trim(); if(!qText) continue; const optInputs = item.querySelectorAll('input[placeholder^="Đáp án"]'); const correctRadio = item.querySelectorAll('input[type="radio"]'); const options = []; let correctIdx = 0; optInputs.forEach((inp, idx) => { options.push(inp.value.trim()); if(correctRadio[idx].checked) correctIdx = idx; }); newQuestions.push({ q: qText, options: options, a: correctIdx }); } if(newQuestions.length === 0) return alert("Vui lòng nhập ít nhất 1 câu hỏi!"); try { await setDoc(QUIZ_DATA_DOC(db), { list: newQuestions }); activeQuestions = newQuestions; document.getElementById('quiz-editor').classList.add('hidden'); alert("Đã lưu bộ câu hỏi thành công!"); } catch(e) { alert("Lỗi lưu: " + e.message); } },
+        saveQuizQuestions: async () => { const container = document.getElementById('editor-questions-list'); const newQuestions = []; for(let i = 0; i < container.children.length; i++) { const item = container.children[i]; const qText = item.querySelector('.question-input').value.trim(); if(!qText) continue; const optInputs = item.querySelectorAll('input[placeholder^="Đáp án"]'); const correctRadio = item.querySelectorAll('input[type="radio"]'); const options = []; let correctIdx = 0; optInputs.forEach((inp, idx) => { options.push(inp.value.trim()); if(correctRadio[idx].checked) correctIdx = idx; }); newQuestions.push({ q: qText, options: options, a: correctIdx }); } if(newQuestions.length === 0) return alert("Vui lòng nhập ít nhất 1 câu hỏi!"); try { await setDoc(QUIZ_DATA_DOC(db), { list: newQuestions }); activeQuestions = newQuestions; document.getElementById('quiz-editor').classList.add('hidden'); alert("Đã lưu bộ câu hỏi thành công!"); } catch(e) { alert("Lỗi lưu: " + e.message); } },
         deleteAllQuestions: async () => { if(confirm("CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ câu hỏi trong bộ đề không? Hành động này không thể hoàn tác.")) { try { await setDoc(QUIZ_DATA_DOC(db), { list: [] }); activeQuestions = []; window.app.openQuizEditor(); alert("Đã xóa sạch toàn bộ câu hỏi!"); } catch(e) { alert("Lỗi khi xóa: " + e.message); } } },
         renderQuizUI: async (status) => { const waitingEl = document.getElementById('quiz-waiting'); const playingEl = document.getElementById('quiz-playing'); const resultEl = document.getElementById('quiz-result'); const adminEl = document.getElementById('quiz-admin-controls'); waitingEl.classList.add('hidden'); playingEl.classList.add('hidden'); resultEl.classList.add('hidden'); if(currentUser.role === 'admin') { adminEl.classList.remove('hidden'); return; } if(status === 'waiting') { waitingEl.classList.remove('hidden'); currentScore = 0; currentQIndex = 0; } else if (status === 'active') { if(activeQuestions.length === 0) { alert("Chưa có câu hỏi!"); return; } const myProgRef = doc(db, `artifacts/${appId}/quiz_results`, currentUser.id); const myProgSnap = await getDoc(myProgRef); if(myProgSnap.exists()) { const data = myProgSnap.data(); currentQIndex = data.currentQuestion || 0; currentScore = data.score || 0; } else { currentQIndex = 0; currentScore = 0; } if(currentQIndex >= activeQuestions.length) { document.getElementById('final-score').textContent = currentScore; document.getElementById('earned-coins').textContent = currentScore; resultEl.classList.remove('hidden'); } else { playingEl.classList.remove('hidden'); window.app.renderQuestion(); } } else if (status === 'finished') { const myProgRef = doc(db, `artifacts/${appId}/quiz_results`, currentUser.id); const myProgSnap = await getDoc(myProgRef); const finalS = myProgSnap.exists() ? myProgSnap.data().score : currentScore; document.getElementById('final-score').textContent = finalS; document.getElementById('earned-coins').textContent = finalS; resultEl.classList.remove('hidden'); } },
         renderQuestion: () => { if(currentQIndex >= activeQuestions.length) { window.app.finishQuizAttempt(); return; } const q = activeQuestions[currentQIndex]; document.getElementById('q-idx').textContent = currentQIndex + 1; document.getElementById('q-total').textContent = activeQuestions.length; document.getElementById('q-score-disp').textContent = currentScore + ' điểm'; document.getElementById('q-text').textContent = q.q; document.getElementById('btn-next-q').classList.add('hidden'); const optsDiv = document.getElementById('q-options'); optsDiv.innerHTML = q.options.map((opt, idx) => `<div id="opt-${idx}" onclick="app.answerQuiz(${idx})" class="quiz-option">${opt}</div>`).join(''); clearInterval(quizTimer); quizTimeLeft = 20; const barFill = document.getElementById('timer-bar-fill'); const timerText = document.getElementById('timer-text'); barFill.style.width = '100%'; barFill.style.background = '#22c55e'; timerText.textContent = quizTimeLeft + 's'; quizTimer = setInterval(() => { quizTimeLeft--; const pct = (quizTimeLeft / 20) * 100; barFill.style.width = pct + '%'; if(pct < 30) barFill.style.background = '#ef4444'; timerText.textContent = quizTimeLeft + 's'; if(quizTimeLeft <= 0) { clearInterval(quizTimer); app.answerQuiz(-1); } }, 1000); },
@@ -1552,6 +1651,8 @@ btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
         },
 
      processPetResponse: async (text) => {
+// 👇 THÊM DÒNG CHẶN NÀY VÀO ĐẦU 👇
+            if (currentUser.pet && currentUser.pet.isDead) return alert("Thú cưng đã mất nên không thể trò chuyện được nữa!");
             const bubble = document.getElementById('pet-chat-bubble');
             const chatText = document.getElementById('pet-chat-text');
 // [THÊM MỚI] 1. Khởi tạo bộ nhớ nếu chưa có
@@ -1633,20 +1734,62 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
                 if(data.error) throw new Error(data.error.message);
                 
                 let reply = data.candidates[0].content.parts[0].text;
-// 👇👇👇 CODE XỬ LÝ VIDEO (TỰ ĐỘNG TÌM KIẾM) 👇👇👇
+// 👇👇👇 CODE THÔNG MINH: KẾT HỢP NHÚNG VÀ CỬA SỔ NỔI 👇👇👇
                 const videoMatch = reply.match(/\[VIDEO:\s*(.+?)\]/);
-if (videoMatch && videoMatch[1]) {
-    const searchTerm = videoMatch[1].trim();
-    const player = document.getElementById('pet-media-player');
-    const iframe = document.getElementById('youtube-iframe');
-    if(player && iframe) {
-        player.classList.remove('hidden');
-        // Lệnh này bảo Youtube: "Tìm bài này và phát luôn đi!"
-        iframe.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchTerm)}&autoplay=1&origin=${window.location.origin}`;
-    }
-    reply = reply.replace(videoMatch[0], '').trim();
-}
-                // 👆👆👆 KẾT THÚC CODE MỚI 👆👆👆
+                if (videoMatch && videoMatch[1]) {
+                    let searchTerm = videoMatch[1].trim().toLowerCase();
+                    const player = document.getElementById('pet-media-player');
+                    const iframe = document.getElementById('youtube-iframe');
+                    
+                    // 1. DANH SÁCH BÀI TỦ (Sẽ chạy ngay trong khung game)
+                    // Tôi đã đổi mã Baby Shark sang bản Remix để dễ chạy hơn
+                    const vipList = {
+                        "baby shark": "d151wW-j61E",    // Baby Shark Remix (An toàn hơn bản gốc)
+                        "cá mập": "d151wW-j61E",
+                        "doraemon": "336k9a0bKVQ",      // Nhạc Doraemon
+                        "tom": "t0Q2otsqC4I",           // Tom & Jerry
+                        "jerry": "t0Q2otsqC4I",
+                        "nhạc": "jfKfPfyJRdk",          // Nhạc Chill (Lofi Girl)
+                        "chill": "jfKfPfyJRdk"
+                    };
+
+                    let vipID = null;
+                    // Kiểm tra xem có trúng bài tủ không
+                    for (let key in vipList) {
+                        if (searchTerm.includes(key)) {
+                            vipID = vipList[key];
+                            break;
+                        }
+                    }
+
+                    if (vipID && player && iframe) {
+                        // TRƯỜNG HỢP 1: BÀI TỦ -> HIỆN KHUNG PLAYER TRONG GAME
+                        player.classList.remove('hidden');
+                        iframe.src = `https://www.youtube.com/embed/${vipID}?autoplay=1`;
+                    } else {
+                        // TRƯỜNG HỢP 2: BÀI LẠ -> MỞ CỬA SỔ NỔI (MINI POPUP)
+                        // Mở cửa sổ nhỏ 500x300 ở góc màn hình, không che mất game
+                        const w = 500;
+                        const h = 300;
+                        const left = (screen.width/2) - (w/2);
+                        const top = (screen.height/2) - (h/2);
+                        
+                        // Link tìm kiếm Youtube
+                        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm)}`;
+                        
+                        window.open(url, 'MusicPopup', `width=${w},height=${h},top=${top},left=${left}`);
+                        
+                        // Thông báo cho người dùng biết
+                        reply += "\n(Em mở cửa sổ nhỏ để cô xem cho đỡ lỗi nha! 🎶)";
+                        
+                        // Ẩn khung player trong game đi cho đỡ vướng
+                        if(player) player.classList.add('hidden');
+                    }
+                    
+                    // Xóa mã video khỏi câu chat để cho đẹp
+                    reply = reply.replace(videoMatch[0], '').trim();
+                }
+                // 👆👆👆 KẾT THÚC CODE 👆👆👆
 // [THÊM MỚI] Lưu câu trả lời của thú vào lịch sử
                 window.petChatHistory.push({ role: "model", parts: [{ text: reply }] });
                 
@@ -1668,14 +1811,30 @@ if (videoMatch && videoMatch[1]) {
         },
         
         speak: (text) => {
-            // 1. Ngắt lời cũ nếu đang nói
+            // 1. Ngắt lời cũ ngay lập tức
             if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-            
-            // 2. [CODE MỚI] ƯU TIÊN DÙNG GIỌNG GOOGLE ONLINE (Chuẩn 100% Tiếng Việt)
+            const audio = document.getElementById('pet-audio');
+            audio.pause();
+            audio.currentTime = 0;
+
+            // 2. MẸO QUAN TRỌNG: Google TTS miễn phí chỉ cho phép dưới 200 ký tự.
+            // Nếu AI nói dài, ta chỉ lấy câu đầu tiên hoặc cắt ngắn lại để Google chịu đọc.
+            // Nếu không cắt, Google trả về lỗi 404 -> Code lại nhảy về giọng máy dở tệ.
+            let safeText = text;
+            if (safeText.length > 150) {
+                // Cố gắng tìm dấu chấm câu để cắt cho tự nhiên
+                const splitIndex = safeText.indexOf('.', 100); 
+                if (splitIndex !== -1) {
+                    safeText = safeText.substring(0, splitIndex + 1); // Lấy câu đầu
+                } else {
+                    safeText = safeText.substring(0, 150); // Hoặc cắt thô nếu không có dấu chấm
+                }
+            }
+
             try {
-                const audio = document.getElementById('pet-audio');
-                // Link gọi giọng Google Dịch
-                const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
+                // 3. Dùng máy chủ google.com.vn để định tuyến tốt hơn ở VN
+                // client=tw-ob là mã client ổn định nhất hiện nay
+                const url = `https://translate.google.com.vn/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
                 
                 audio.src = url;
                 audio.volume = 1.0;
@@ -1684,37 +1843,14 @@ if (videoMatch && videoMatch[1]) {
                 
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
-                        console.log("Google lỗi, chuyển sang giọng máy:", error);
-                        // Nếu Google lỗi (do mạng/chặn), gọi hàm dự phòng bên dưới
+                        console.error("Google chặn hoặc lỗi mạng:", error);
+                        // Nếu vẫn lỗi thì đành dùng giọng máy dự phòng (đã nâng cấp ở dưới)
                         window.app.speakNative(text);
                     });
                 }
             } catch (e) {
-                // Nếu code lỗi, cũng gọi hàm dự phòng
                 window.app.speakNative(text);
             }
-        }, // <--- NHỚ CÓ DẤU PHẨY Ở ĐÂY
-
-        // 3. HÀM DỰ PHÒNG (CODE CŨ CỦA BẠN - ĐÃ NÂNG CẤP NHẸ)
-        speakNative: (text) => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; 
-            utterance.rate = 1.1; 
-            utterance.pitch = 1.2;
-            utterance.volume = 1;
-
-            const voices = window.speechSynthesis.getVoices();
-            
-            // [NÂNG CẤP] Ưu tiên tìm giọng có chữ "Google" trong máy trước
-            let vnVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
-            // Nếu không có mới tìm giọng tiếng Việt bất kỳ
-            if (!vnVoice) {
-                vnVoice = voices.find(v => v.lang.includes('vi'));
-            }
-            
-            if (vnVoice) utterance.voice = vnVoice;
-
-            window.speechSynthesis.speak(utterance);
         },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
