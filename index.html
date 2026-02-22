@@ -12,6 +12,20 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     <style>
+/* Hiệu ứng xu bay lên */
+@keyframes floatCoin {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-40px) scale(1.5); }
+}
+.coin-floating-effect {
+    position: absolute;
+    font-weight: 900;
+    font-size: 1.25rem;
+    pointer-events: none; /* Không cản trở click chuột */
+    z-index: 9999;
+    animation: floatCoin 1.2s ease-out forwards;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.3); /* Đổ bóng cho chữ nổi bật */
+}
 /* Hiệu ứng khung vàng lấp lánh */
 .frame-gold-sparkle {
     box-shadow: 0 0 20px #ffd700, inset 0 0 10px #fff;
@@ -630,7 +644,7 @@
                         
                         <div id="pet-display" class="pet-character pet-move" onclick="window.app.animatePetClick()"></div>
                         <div id="pet-waste-container" class="absolute inset-0 pointer-events-none" style="z-index: 100;"></div>
-                        <audio id="pet-audio" class="hidden" referrerpolicy="no-referrer"></audio>
+                        <audio id="pet-audio" class="hidden"></audio>
                         
                         <div id="pet-chat-bubble" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-2xl shadow-lg border-2 border-purple-300 max-w-[200px] text-center z-30 animate-bounce-slow">
                             <p id="pet-chat-text" class="text-sm font-bold text-purple-700">...</p>
@@ -844,7 +858,7 @@
             <div id="admin-panel" class="hidden space-y-6">
                 <div class="bg-yellow-50 p-5 rounded-2xl shadow-sm border border-yellow-200">
                     <h3 class="font-bold text-yellow-800 mb-3"><i data-lucide="gift"></i> Tặng Điểm Thưởng (Xu)</h3>
-                    <select id="reward-student-select" class="w-full p-3 mb-2 rounded-xl border bg-white text-sm"><option value="">-- Chọn học sinh --</option></select>
+                    <div id="reward-student-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto mb-2 bg-white p-2 rounded-xl border"></div>
                     <input type="number" id="reward-amount" placeholder="Số xu (VD: 50)" class="w-full p-3 mb-2 rounded-xl border bg-white text-sm">
                     <input type="text" id="reward-reason" placeholder="Lý do (VD: Làm việc tốt)" class="w-full p-3 mb-2 rounded-xl border bg-white text-sm">
                     <button onclick="app.adminGiveCoins()" class="w-full py-3 bg-yellow-500 text-white font-bold rounded-xl hover:bg-yellow-600 transition shadow">Tặng Xu</button>
@@ -1008,7 +1022,28 @@ firebase.initializeApp(firebaseConfig);
         const src = avatarUrl || 'https://via.placeholder.com/32';
         return `<img src="${src}" class="${size} rounded-full object-cover shrink-0 ${frameClass} framed-avatar ${extraClass} m-0.5">`;
     };
-
+// --- HÀM TẠO HIỆU ỨNG XU BAY LÊN ---
+window.showCoinEffect = (amount) => {
+    const coinTarget = document.getElementById('current-coins');
+    if (!coinTarget) return;
+    
+    // Lấy tọa độ của chữ số xu hiện tại trên góc phải màn hình
+    const rect = coinTarget.getBoundingClientRect(); 
+    
+    // Tạo phần tử chữ bay lên
+    const effectEl = document.createElement('div');
+    effectEl.className = `coin-floating-effect ${amount > 0 ? 'text-green-500' : 'text-red-500'}`;
+    effectEl.innerText = amount > 0 ? `+${amount}` : amount;
+    
+    // Đặt vị trí xuất phát ngay cạnh số xu hiện tại
+    effectEl.style.left = `${rect.left - 15}px`;
+    effectEl.style.top = `${rect.top + window.scrollY}px`;
+    
+    document.body.appendChild(effectEl);
+    
+    // Tự động xóa thẻ div sau 1.2 giây (khi hiệu ứng chạy xong)
+    setTimeout(() => effectEl.remove(), 1200);
+};
     const init = async () => {
         lucide.createIcons();
         applySeasonalTheme();
@@ -1157,7 +1192,7 @@ resetClassData: async () => {
                     if (tab === 'stars' && currentUser.role === 'admin') { 
                         document.getElementById('star-admin-form').classList.remove('hidden'); 
                         window.app.loadStudentsForSelection(); 
-                    } else { 
+                    } else if (tab !== 'bday') {
                         document.getElementById('post-form').classList.remove('hidden'); 
                     } 
                 } 
@@ -1284,7 +1319,11 @@ resetClassData: async () => {
         // ^^^ DẤU PHẨY NÀY LÀ BẮT BUỘC ĐỂ NỐI VỚI HÀM LOGIN BÊN DƯỚI ^^^
         // --- CÁC HÀM KHÁC (USER, CHAT, PET, QUIZ) ---
         login: async () => { const u = document.getElementById('username').value.trim(); const p = document.getElementById('password').value.trim(); const err = document.getElementById('login-error'); if(!u || !p) return; try { if (!auth.currentUser) await signInAnonymously(auth); const q = query(collection(db, `artifacts/${appId}/users`), where('username', '==', u)); const snap = await getDocs(q); if (!snap.empty) { const d = snap.docs[0].data(); if (d.password === p) { currentUser = { id: snap.docs[0].id, ...d }; window.app.onLoginSuccess(); } else { err.textContent = "Sai mật khẩu!"; err.classList.remove('hidden'); } } else { if(u === 'admin' && p === 'admin') { const adminRef = doc(db, `artifacts/${appId}/users`, 'admin'); const adminSnap = await getDoc(adminRef); let adminData = { username: 'admin', password: 'admin', name: 'Cô Giáo', role: 'admin', dob: '' }; if(adminSnap.exists()) { adminData = { ...adminData, ...adminSnap.data() }; } else { adminData.avatarUrl = ''; } await setDoc(adminRef, adminData, {merge:true}); currentUser = { id: 'admin', ...adminData }; window.app.onLoginSuccess(); } else { err.textContent = "Không tìm thấy tài khoản!"; err.classList.remove('hidden'); } } } catch(e) { err.textContent = "Lỗi kết nối: " + e.message; err.classList.remove('hidden'); } },
-        onLoginSuccess: () => { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('login-view').classList.remove('active-flex'); document.getElementById('dashboard-view').classList.add('active-block'); document.getElementById('user-name').textContent = currentUser.name; document.getElementById('admin-card').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('btn-clear-chat').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('user-balance-display').classList.remove('hidden'); document.getElementById('current-coins').textContent = currentUser.coins || 0; window.app.loadBanner(); window.app.loadChat(); window.app.checkCheckInStatus(); window.app.checkNotifications(); window.app.reportOnline(); setInterval(window.app.reportOnline, 30000); },
+        onLoginSuccess: () => { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser)); document.getElementById('login-view').classList.remove('active-flex'); document.getElementById('dashboard-view').classList.add('active-block'); document.getElementById('user-name').textContent = currentUser.name; document.getElementById('admin-card').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('btn-clear-chat').classList.toggle('hidden', currentUser.role !== 'admin'); document.getElementById('user-balance-display').classList.remove('hidden'); document.getElementById('current-coins').textContent = currentUser.coins || 0; window.app.loadBanner(); window.app.loadChat(); window.app.checkCheckInStatus(); window.app.checkNotifications();
+// 👇👇👇 QUAN TRỌNG: THÊM DÒNG NÀY ĐỂ KÍCH HOẠT CHÚC MỪNG SINH NHẬT 👇👇👇
+            window.app.checkDailyBirthday(); 
+            // 👆👆👆 KHÔNG CÓ DÒNG NÀY LÀ KHÔNG CHẠY ĐÂU 👆👆👆
+ window.app.reportOnline(); setInterval(window.app.reportOnline, 30000); },
         logout: () => { if(confirm("Đăng xuất?")) { localStorage.removeItem(USER_STORAGE_KEY); location.reload(); } },
         goHome: () => { if (unsubscribeFeed) { unsubscribeFeed(); unsubscribeFeed = null; } document.getElementById('detail-view').classList.remove('active-block'); document.getElementById('dashboard-view').classList.add('active-block'); window.scrollTo(0,0); },
         
@@ -1465,10 +1504,11 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
         animatePetClick: () => { const petEl = document.getElementById('pet-display'); if (!petEl) return; petEl.classList.add('pet-zoom-wobble'); setTimeout(() => { petEl.classList.remove('pet-zoom-wobble'); }, 4000); },
         toggleFoodMenu: () => { document.getElementById('pet-food-menu').classList.toggle('hidden'); },
         buyPetItem: async (price, type, val) => {
+window.showCoinEffect(-price);
 
 // 👇 THÊM DÒNG CHẶN NÀY VÀO ĐẦU 👇
             if (currentUser.pet && currentUser.pet.isDead) return alert("Thú cưng đã mất! Hãy hồi sinh để tiếp tục chăm sóc.");
- const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000); currentUser.coins -= price; document.getElementById('current-coins').textContent = currentUser.coins; } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
+ const currentMoney = window.app.userCache[currentUser.id].coins || 0; if(currentMoney < price) return alert(`Bạn không đủ xu!`); const p = currentUser.pet; const currentStat = parseInt(p[type] || 0); if(currentStat >= 100) return alert("Thú cưng đã đủ chỉ số này!"); try { let newVal = Math.min(100, currentStat + val); let newExp = (p.exp || 0) + 5; let newLevel = p.level; if(newExp >= 100) { newExp = 0; newLevel++; alert(`🎉 Chúc mừng! Thú cưng lên cấp ${newLevel}!`); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), [`pet.${type}`]: newVal, "pet.exp": newExp, "pet.level": newLevel, "pet.lastUpdate": Date.now() }); document.getElementById('pet-food-menu').classList.add('hidden'); const petEl = document.getElementById('pet-display'); petEl.classList.add('pet-eating'); setTimeout(()=>petEl.classList.remove('pet-eating'), 2000);  } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
         playPet: () => { window.app.buyPetItem(0, 'fun', 10); window.app.animatePetClick(); },
         cleanPet: () => { window.app.buyPetItem(0, 'hygiene', 20); },
         revivePet: async () => { if(currentUser.coins < 300) return alert("Cần 300 xu để hồi sinh!"); if(confirm("Dùng 300 xu để hồi sinh?")) { try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-300), "pet.isDead": false, "pet.hunger": 50, "pet.fun": 50, "pet.hygiene": 50 }); alert("Thú cưng đã sống lại!"); window.app.renderPetGame(); } catch(e) { alert(e.message); } } },
@@ -1479,6 +1519,7 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
 // --- ĐOẠN CODE MỚI 1: KIỂM TRA THỜI GIAN ---
             const now = Date.now();
             const lastPost = currentUser.lastPostTime || 0; // Lấy thời gian bài trước (nếu có)
+window.showCoinEffect(10);
             const diff = now - lastPost;
             const cooldownTime = 60 * 1000; // 60 giây (Bạn có thể sửa số này)
 
@@ -1500,21 +1541,22 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
                 
                 // Cập nhật luôn vào biến cục bộ để không cần tải lại trang
                 currentUser.lastPostTime = now;
-                currentUser.coins = (currentUser.coins || 0) + 10;
-                document.getElementById('current-coins').textContent = currentUser.coins;
+                
                 // --- KẾT THÚC ĐOẠN 2 ---
 
- await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(10) }); document.getElementById('post-content').value = ''; window.app.clearImg(); } catch(e) { alert("Lỗi: " + e.message); } finally { btn.textContent = 'Đăng'; btn.disabled = false; } },
+document.getElementById('post-content').value = ''; window.app.clearImg(); } catch(e) { alert("Lỗi: " + e.message); } finally { btn.textContent = 'Đăng'; btn.disabled = false; } },
         handleImg: (inp) => { if(inp.files[0]) { const r = new FileReader(); r.onload = e => { document.getElementById('img-preview').src = e.target.result; document.getElementById('preview-area').classList.remove('hidden'); }; r.readAsDataURL(inp.files[0]); } },
         clearImg: () => { document.getElementById('file-input').value = ''; document.getElementById('preview-area').classList.add('hidden'); },
-        like: async (tab, id, liked) => { if (liked) return; const btn = document.querySelector(`button[onclick="window.app.like('${tab}', '${id}', ${liked})"]`); if(btn) { btn.classList.remove('text-gray-400', 'text-gray-500'); btn.classList.add('text-red-500', 'font-bold'); btn.disabled = true; const countSpan = btn.querySelector('span'); if(countSpan) { let currentCount = parseInt(countSpan.textContent) || 0; countSpan.textContent = currentCount + 1; } } const ref = doc(db, `artifacts/${appId}/posts_${tab}`, id); try { await updateDoc(ref, { likes: arrayUnion(currentUser.id) }); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(5) }); } catch(e) { console.error("Lỗi like:", e); if(btn) btn.classList.remove('text-red-500'); } },
+        like: async (tab, id, liked) => { if (liked) return; const btn = document.querySelector(`button[onclick="window.app.like('${tab}', '${id}', ${liked})"]`); if(btn) { btn.classList.remove('text-gray-400', 'text-gray-500'); btn.classList.add('text-red-500', 'font-bold'); btn.disabled = true; const countSpan = btn.querySelector('span'); if(countSpan) { let currentCount = parseInt(countSpan.textContent) || 0; countSpan.textContent = currentCount + 1; } } const ref = doc(db, `artifacts/${appId}/posts_${tab}`, id); try { await updateDoc(ref, { likes: arrayUnion(currentUser.id) }); await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(5) });
+window.showCoinEffect(5);
+ } catch(e) { console.error("Lỗi like:", e); if(btn) btn.classList.remove('text-red-500'); } },
         cmtBtn: async (tab, id) => {
 // 👇👇👇 BẮT ĐẦU ĐOẠN CODE CHẶN SPAM COMMENT (30 GIÂY) 👇👇👇
             const now = Date.now();
             const lastCmt = currentUser.lastCommentTime || 0; // Lấy thời gian comment trước
             const diff = now - lastCmt;
             const cooldown = 30 * 1000; // 30 giây (Bạn có thể sửa số này)
-
+window.showCoinEffect(5);
             // Nếu chưa đủ 30 giây và không phải Admin thì chặn
             if (diff < cooldown && currentUser.role !== 'admin') {
                 const remaining = Math.ceil((cooldown - diff) / 1000);
@@ -1533,8 +1575,7 @@ panda: 'url("https://png.pngtree.com/thumb_back/fh260/background/20220525/pngtre
                 
                 // Cập nhật ngay vào biến người dùng hiện tại để chặn tiếp lần sau
                 currentUser.lastCommentTime = now;
-                currentUser.coins = (currentUser.coins || 0) + 5;
-                document.getElementById('current-coins').textContent = currentUser.coins;
+                
                 // 👆👆👆 KẾT THÚC ĐOẠN SỬA 👆👆👆
 
 
@@ -1555,10 +1596,63 @@ inputEl.value = ''; } catch (e) { alert("Lỗi gửi comment: " + e.message); } 
         loadBdayComments: (uid) => { onSnapshot(query(collection(db, `artifacts/${appId}/users/${uid}/wishes`), orderBy('time','asc')), snap => { const cEl = document.getElementById('comments-bday'); if(cEl) cEl.innerHTML = snap.empty ? '<i class="text-xs text-gray-400">Chưa có lời chúc nào.</i>' : snap.docs.map(d=> `<div class="text-xs bg-gray-50 p-1 rounded"><b>${d.data().user}:</b> ${d.data().text}</div>`).join(''); }); },
         cmtBdayBtn: (uid) => { const val = document.getElementById('i-bday').value.trim(); if(val) { addDoc(collection(db, `artifacts/${appId}/users/${uid}/wishes`), { user: currentUser.name, text: val, time: new Date().toISOString() }); document.getElementById('i-bday').value = ''; } },
         
-        loadStudentsForReward: async () => { const selectEl = document.getElementById('reward-student-select'); selectEl.innerHTML = '<option value="">-- Chọn học sinh --</option>'; try { const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); snap.forEach(doc => { const u = doc.data(); if(u.role !== 'admin') { const name = u.name || u.fullName || u.username; selectEl.innerHTML += `<option value="${doc.id}">${name} (Xu: ${u.coins||0})</option>`; } }); } catch(e) {} },
+        loadStudentsForReward: async () => { 
+            const listEl = document.getElementById('reward-student-list'); 
+            listEl.innerHTML = ''; 
+            try { 
+                const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); 
+                let html = '';
+                snap.forEach(doc => { 
+                    const u = doc.data(); 
+                    if(u.role !== 'admin') { 
+                        const name = u.name || u.fullName || u.username; 
+                        // Dùng chung class student-select-item của bảng vinh danh
+                        html += `<label class="student-select-item"><input type="checkbox" value="${doc.id}" class="w-5 h-5 accent-yellow-500 shrink-0"><span class="ml-2">${name} (Xu: ${u.coins||0})</span></label>`; 
+                    } 
+                }); 
+                listEl.innerHTML = html;
+            } catch(e) {} 
+        },
         loadStudentsForSelection: async () => { const s = await getDocs(collection(db, `artifacts/${appId}/users`)); document.getElementById('star-student-list').innerHTML = s.docs.map(d=>`<label class="student-select-item"><input type="checkbox" value="${d.id}" class="w-5 h-5 accent-yellow-500 shrink-0"><span class="ml-2">${d.data().name}</span></label>`).join(''); },
         postStarBoard: async () => { const t=document.getElementById('star-title').value; if(!t) return; const sel = Array.from(document.querySelectorAll('#star-student-list input:checked')).map(i=> { const u=window.app.userCache[i.value]; return {id:i.value, name:u.name, avatarUrl:u.avatarUrl}; }); await addDoc(collection(db, `artifacts/${appId}/posts_stars`), { type:'star_board', content:t, students:sel, author:currentUser.name, uid:currentUser.id, date:new Date().toISOString() }); alert("Đã đăng"); },
-        adminGiveCoins: async () => { const uid = document.getElementById('reward-student-select').value; const amount = parseInt(document.getElementById('reward-amount').value); const reason = document.getElementById('reward-reason').value; if (!uid) return alert("Vui lòng chọn học sinh!"); if (!amount || amount <= 0) return alert("Số xu phải lớn hơn 0!"); try { await updateDoc(doc(db, `artifacts/${appId}/users`, uid), { coins: increment(amount) }); await addDoc(collection(db, `artifacts/${appId}/posts_notif`), { content: `🎁 Cô giáo tặng ${amount} Xu. Lý do: ${reason}`, author: currentUser.name, uid: 'admin', date: new Date().toISOString(), likes: [], comments: [], targetUser: uid }); alert(`Đã tặng ${amount} Xu thành công!`); document.getElementById('reward-amount').value = ''; document.getElementById('reward-reason').value = ''; window.app.loadStudentsForReward(); } catch(e) { console.error(e); alert("Lỗi: " + e.message); } },
+        adminGiveCoins: async () => { 
+    const checkboxes = document.querySelectorAll('#reward-student-list input[type="checkbox"]:checked');
+    const amount = parseInt(document.getElementById('reward-amount').value); 
+    const reason = document.getElementById('reward-reason').value.trim(); // Thêm .trim() để xóa khoảng trắng thừa
+
+    if (checkboxes.length === 0) return alert("Vui lòng chọn ít nhất 1 học sinh!"); 
+    if (!amount || amount <= 0) return alert("Số xu phải lớn hơn 0!"); 
+
+    try { 
+        // 1. Vòng lặp này CHỈ làm nhiệm vụ cộng xu cho từng học sinh
+        for (const checkbox of checkboxes) {
+            const uid = checkbox.value;
+            await updateDoc(doc(db, `artifacts/${appId}/users`, uid), { coins: increment(amount) }); 
+        }
+
+        // 2. LOGIC MỚI: Kiểm tra nếu có điền lý do thì mới đăng 1 bài duy nhất
+        if (reason !== "") {
+            // Tạo danh sách tên các học sinh được tặng để bài đăng đầy đủ (tùy chọn)
+            const count = checkboxes.length;
+            await addDoc(collection(db, `artifacts/${appId}/posts_notif`), { 
+                content: `🎁 Cô giáo tặng ${amount} Xu cho ${count} bạn. Lý do: ${reason}`, 
+                author: currentUser.name, 
+                uid: 'admin', 
+                date: new Date().toISOString(), 
+                likes: [], 
+                comments: [],
+                targetUser: "all" // Đặt là all để tất cả mọi người đều thấy bài thông báo chung này
+            }); 
+        }
+
+        alert(`Đã tặng ${amount} Xu thành công!`); 
+        
+        // Reset form
+        document.getElementById('reward-amount').value = ''; 
+        document.getElementById('reward-reason').value = ''; 
+        window.app.loadStudentsForReward(); 
+    } catch(e) { console.error(e); alert("Lỗi: " + e.message); } 
+},
         
         buyItem: async (id, price) => { if((currentUser.coins||0) < price) return alert("Thiếu xu!"); if((currentUser.inventory||[]).includes(id)) return alert("Đã có!"); if(confirm("Mua?")) try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(-price), inventory: arrayUnion(id) }); alert("Đã mua!"); } catch(e){ alert(e.message); } },
         renderInventory: () => { const list = document.getElementById('inventory-list'), inv = currentUser.inventory||[]; list.innerHTML = inv.length ? inv.map(i => `<div class="p-2 border rounded flex justify-between items-center"><span>${i==='frame_plasma'?'Khung Huyền Thoại' : (i==='frame_diamond'?'Khung Kim Cương':(i==='frame_gold'?'Khung Vàng':'Khung Bạc'))}</span>${currentUser.frame===i ? '<span class="text-green-600 font-bold text-xs">Đang dùng</span>' : `<button onclick="app.equipFrame('${i}')" class="text-blue-500 font-bold text-xs">Dùng</button>`}</div>`).join('') : '<p class="text-gray-400">Trống</p>'; },
@@ -1570,7 +1664,76 @@ inputEl.value = ''; } catch (e) { alert("Lỗi gửi comment: " + e.message); } 
         toggleNotif: (view = 'dash') => { const list = document.getElementById(view === 'detail' ? 'detail-notif-list' : 'dash-notif-list'); const isHidden = list.style.display === 'none' || list.style.display === ''; document.querySelectorAll('.notif-dropdown').forEach(el => el.style.display = 'none'); if(isHidden) { list.style.display = 'block'; localStorage.setItem('last_notif_check', new Date().toISOString()); document.getElementById('dash-notif-badge').classList.add('hidden'); document.getElementById('detail-notif-badge').classList.add('hidden'); } },
         handleNotifClick: (tab) => { window.app.nav(tab); document.querySelectorAll('.notif-dropdown').forEach(el => el.style.display = 'none'); },
         
-        checkDailyBirthday: async () => { const today = new Date(); const dateKey = `seen_bday_${today.getFullYear()}_${today.getMonth()}_${today.getDate()}`; if (localStorage.getItem(dateKey)) return; try { const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); let bdayNames = []; snap.forEach(d => { const u = d.data(); if (u.dob) { const dob = new Date(u.dob + 'T00:00:00'); if (dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth()) { bdayNames.push(u.name); } } }); if (bdayNames.length > 0) { const modal = document.getElementById('birthday-modal'); const nameEl = document.getElementById('bday-names'); if(modal && nameEl) { nameEl.textContent = bdayNames.join(", "); modal.classList.remove('hidden'); var duration = 5 * 1000; var animationEnd = Date.now() + duration; var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 200 }; var interval = setInterval(function() { var timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) { return clearInterval(interval); } var particleCount = 50 * (timeLeft / duration); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2, y: Math.random() - 0.2 } })); confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2 + 0.8, y: Math.random() - 0.2 } })); }, 250); localStorage.setItem(dateKey, 'true'); } } } catch (e) { console.error("Lỗi check sinh nhật:", e); } },
+        checkDailyBirthday: async () => { 
+            const today = new Date(); 
+            const currentMonth = today.getMonth() + 1;
+            const currentDay = today.getDate();
+
+            // 👇 SỬA LẠI GIỐNG BẢN CŨ: Dùng sessionStorage (Tắt tab là quên -> Mở lại là chúc mừng tiếp)
+            const dateKey = `bday_check_${today.getFullYear()}_${today.getMonth()}_${today.getDate()}`; 
+            
+            // Nếu phiên làm việc này đã chúc rồi thì thôi. 
+            // Nhưng nếu tắt tab mở lại, nó sẽ chúc tiếp!
+            if (sessionStorage.getItem(dateKey)) return; 
+
+            console.log(`🔍 Đang kiểm tra sinh nhật ngày: ${currentDay}/${currentMonth}`);
+
+            try { 
+                const snap = await getDocs(collection(db, `artifacts/${appId}/users`)); 
+                let bdayNames = []; 
+
+                snap.forEach(d => { 
+                    const u = d.data(); 
+                    if (u.dob) { 
+                        let uDay = 0, uMonth = 0;
+                        
+                        // Logic "Cắt chuỗi" thông minh (Chính xác hơn bản cũ, không lo lệch múi giờ)
+                        const parts = u.dob.split(/[-/]/); 
+                        
+                        if (parts.length === 3) {
+                            if (parts[0].length === 4) { // Dạng 2016-02-13
+                                uMonth = parseInt(parts[1]);
+                                uDay = parseInt(parts[2]);
+                            } else { // Dạng 13/02/2016
+                                uDay = parseInt(parts[0]);
+                                uMonth = parseInt(parts[1]);
+                            }
+                        }
+
+                        if (uDay === currentDay && uMonth === currentMonth) { 
+                            bdayNames.push(u.name); 
+                        } 
+                    } 
+                }); 
+
+                if (bdayNames.length > 0) { 
+                    const modal = document.getElementById('birthday-modal'); 
+                    const nameEl = document.getElementById('bday-names'); 
+                    
+                    if(modal && nameEl) { 
+                        nameEl.textContent = bdayNames.join(", "); 
+                        modal.classList.remove('hidden'); 
+                        
+                        // Bắn pháo giấy
+                        var duration = 3 * 1000; 
+                        var animationEnd = Date.now() + duration; 
+                        var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 200 }; 
+                        var interval = setInterval(function() { 
+                            var timeLeft = animationEnd - Date.now(); 
+                            if (timeLeft <= 0) { return clearInterval(interval); } 
+                            var particleCount = 50 * (timeLeft / duration); 
+                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2, y: Math.random() - 0.2 } })); 
+                            confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random()*0.2 + 0.8, y: Math.random() - 0.2 } })); 
+                        }, 250); 
+                        
+                        // 👇 Đánh dấu vào sessionStorage (Giống bản cũ)
+                        sessionStorage.setItem(dateKey, 'checked'); 
+                    } 
+                } 
+            } catch (e) { 
+                console.error("Lỗi check sinh nhật:", e); 
+            } 
+        },
         checkCheckInStatus: () => { const btn = document.getElementById('btn-checkin'); if (!btn) return; const today = new Date().toDateString(); if (currentUser.lastCheckIn === today) { btn.disabled = true; btn.className = "bg-gray-300 text-gray-500 px-3 py-2 rounded-xl font-bold flex items-center gap-1 text-sm cursor-default border border-gray-200"; btn.innerHTML = '<i data-lucide="check" width="16"></i> <span>Đã điểm danh</span>'; lucide.createIcons(); } },
         dailyCheckIn: async () => { const today = new Date().toDateString(); if (currentUser.lastCheckIn === today) return; const btn = document.getElementById('btn-checkin'); btn.innerHTML = '<div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div> Xử lý...'; try { await updateDoc(doc(db, `artifacts/${appId}/users`, currentUser.id), { coins: increment(10), lastCheckIn: today }); currentUser.coins = (currentUser.coins || 0) + 10; currentUser.lastCheckIn = today; document.getElementById('current-coins').textContent = currentUser.coins; window.app.checkCheckInStatus(); alert("🎉 Điểm danh thành công! Bạn nhận được 10 Xu."); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } catch(e) { console.error(e); alert("Lỗi: " + e.message); btn.innerHTML = '<i data-lucide="calendar-check" width="16"></i> <span>Điểm Danh</span>'; lucide.createIcons(); } },
         
@@ -1815,29 +1978,27 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
             }
         },
         
-       speak: (text) => {
-            // 1. Nếu là iPhone/iPad -> Dùng ngay giọng máy (Vẫn giữ nguyên cho iPhone)
+        speak: (text) => {
+            // 1. Kiểm tra nếu là iPhone/iPad -> Dùng ngay giọng máy (Ổn định nhất)
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             if (isIOS) {
                 window.app.speakNative(text);
                 return; 
             }
 
-            // 2. Xử lý Audio trên máy tính
+            // 2. Nếu là Laptop/Android -> Thử dùng Google Online cho hay
             const audio = document.getElementById('pet-audio');
             if(audio) {
                 audio.pause();
                 audio.currentTime = 0;
             }
 
-            // Cắt ngắn nếu câu quá dài
             let safeText = text;
             if (safeText.length > 150) safeText = safeText.substring(0, 150);
 
             try {
-                // 👇 THAY ĐỔI QUAN TRỌNG: Dùng máy chủ 'googleapis' thay vì 'google.com'
-                // Máy chủ này ổn định hơn nhiều trên máy tính
-                const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
+                // Link Google TTS
+                const url = `https://translate.google.com.vn/translate_tts?ie=UTF-8&q=${encodeURIComponent(safeText)}&tl=vi&client=tw-ob`;
                 
                 if(audio) {
                     audio.src = url;
@@ -1846,7 +2007,8 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
                     
                     if (playPromise !== undefined) {
                         playPromise.catch(e => {
-                            console.log("Google API lỗi, chuyển giọng máy:", e);
+                            // Nếu Google lỗi -> Chuyển ngay sang giọng máy
+                            console.log("Google lỗi, chuyển giọng máy:", e);
                             window.app.speakNative(text);
                         });
                     }
@@ -1857,31 +2019,27 @@ Ví dụ: "[VIDEO: Son Tung MTP]", "[VIDEO: Doraemon remix]".
         },
 // 👇👇👇 THÊM HÀM NÀY VÀO NGAY SAU HÀM SPEAK 👇👇👇
         speakNative: (text) => {
+            // Hủy lời nói cũ nếu đang nói dở
             window.speechSynthesis.cancel();
-            
-            // 1. MẸO QUAN TRỌNG: Chrome/Cốc Cốc tải giọng rất chậm.
-            // Nếu danh sách giọng chưa tải xong, hãy chờ nó tải xong rồi mới nói.
-            let voices = window.speechSynthesis.getVoices();
-            if (voices.length === 0) {
-                window.speechSynthesis.onvoiceschanged = () => window.app.speakNative(text);
-                return;
-            }
 
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'vi-VN'; 
+            utterance.lang = 'vi-VN'; // Bắt buộc chọn tiếng Việt
+            utterance.rate = 1.0;     // Tốc độ nói: 1.0 là bình thường, 1.1 là nhanh hơn xíu
             
-            // 2. TÌM GIỌNG VIỆT NAM (Ưu tiên Microsoft An hoặc Google Tiếng Việt)
-            const bestVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Viet') || v.name.includes('An '));
+            // Lấy danh sách giọng đọc trong máy
+            const voices = window.speechSynthesis.getVoices();
+            
+            // Ưu tiên tìm giọng Google hoặc giọng Việt Nam chất lượng cao
+            // Trên iPhone nó sẽ tự chọn giọng Linh/Nam
+            let bestVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('vi'));
             
             if (bestVoice) {
-                // Nếu tìm thấy giọng Việt -> Nói ngay
                 utterance.voice = bestVoice;
-                window.speechSynthesis.speak(utterance);
-            } else {
-                // 3. CHỐT CHẶN: Nếu KHÔNG tìm thấy giọng Việt -> KHÔNG NÓI GÌ CẢ (Im lặng)
-                // Để tránh việc nó đọc tiếng Anh bồi gây khó chịu
-                console.warn("Máy tính này không có giọng Tiếng Việt, con thú sẽ im lặng.");
             }
+
+            // Đọc to lên
+            window.speechSynthesis.speak(utterance);
         },
 
     }; // <--- ĐÂY LÀ DẤU KẾT THÚC WINDOW.APP
